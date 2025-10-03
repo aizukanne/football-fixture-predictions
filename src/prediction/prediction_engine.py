@@ -1,9 +1,10 @@
 """
-Main prediction engine for football fixture predictions with version tracking.
+Main prediction engine for football fixture predictions with version tracking and opponent stratification.
 Consolidates the core prediction logic from makeTeamRankings.py.
 
-Enhanced with Phase 0 version tracking infrastructure to prevent multiplier
-contamination and ensure version compatibility across predictions.
+Enhanced with:
+- Phase 0 version tracking infrastructure to prevent multiplier contamination
+- Phase 1 opponent strength stratification for more accurate predictions
 """
 
 import numpy as np
@@ -11,12 +12,59 @@ from decimal import Decimal
 from datetime import datetime
 from typing import Dict, Tuple, Optional
 
-from ..statistics.distributions import calculate_goal_probabilities, squash_lambda, analyze_match_probabilities
+from ..statistics.distributions import calculate_goal_probabilities, squash_lambda
 from ..statistics.bayesian import apply_smoothing_to_team_data, apply_smoothing_to_binary_rate
 from ..utils.constants import DEFAULT_SMOOTHING_ALPHA
 from ..utils.converters import decimal_to_float
 from ..infrastructure.version_manager import VersionManager
 from ..infrastructure.transition_manager import TransitionManager
+from ..features.opponent_classifier import get_opponent_tier_from_match
+
+
+def get_segmented_params(team_params, opponent_team_id, league_id, season):
+    """
+    Get segmented parameters based on opponent strength tier (Phase 1 enhancement).
+    
+    This function determines the opponent's strength tier and selects the appropriate
+    segmented parameters to improve prediction accuracy.
+    
+    Args:
+        team_params: Team parameters dictionary (with segmented_params if available)
+        opponent_team_id: ID of the opposing team
+        league_id: League ID
+        season: Season for opponent classification
+        
+    Returns:
+        Dict: Appropriate parameter set based on opponent strength
+    """
+    # Check if segmented parameters are available (Phase 1 feature)
+    if not team_params.get('segmented_params') or not season:
+        # Fallback to overall parameters for backward compatibility
+        return team_params
+    
+    try:
+        # For prediction purposes, we need to classify the opponent team
+        # Since we don't have specific match context here, we'll use a simplified approach
+        # by getting the opponent's overall tier classification
+        from ..features.opponent_classifier import OpponentClassifier
+        classifier = OpponentClassifier()
+        opponent_tier = classifier.get_team_tier(opponent_team_id, league_id, season)
+        
+        # Select appropriate segmented parameters
+        segmented_params = team_params['segmented_params']
+        segment_key = f'vs_{opponent_tier}'
+        
+        if segment_key in segmented_params:
+            selected_params = segmented_params[segment_key]
+            print(f"Using {segment_key} parameters for opponent {opponent_team_id} (tier: {opponent_tier})")
+            return selected_params
+        else:
+            print(f"Segmented parameters not available for {segment_key}, using overall parameters")
+            return team_params
+            
+    except Exception as e:
+        print(f"Warning: Failed to select segmented parameters: {e}, using overall parameters")
+        return team_params
 
 
 def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id=None, opponent_lambda=None):
@@ -269,38 +317,70 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
     return base_lambda
 
 
-def calculate_coordinated_predictions(home_team_parameters, away_team_parameters, home_params, away_params, league_id):
+def calculate_coordinated_predictions(home_team_parameters, away_team_parameters, home_params, away_params, league_id, season=None, home_team_id=None, away_team_id=None):
     """
     Calculate coordinated predictions that preserve the ratio between home and away lambdas.
     This replaces individual lambda calculations with coordinated ones.
     
-    Enhanced with Phase 0 version tracking and hierarchical fallback integration.
+    Enhanced with:
+    - Phase 0 version tracking and hierarchical fallback integration
+    - Phase 1 opponent strength stratification for improved accuracy
     
     Args:
         home_team_parameters: Home team raw match data
         away_team_parameters: Away team raw match data
-        home_params: Home team parameters with version metadata
-        away_params: Away team parameters with version metadata
+        home_params: Home team parameters with version metadata and segmented params
+        away_params: Away team parameters with version metadata and segmented params
         league_id: League identifier
+        season: Season for opponent classification (Phase 1)
+        home_team_id: Home team ID (Phase 1)
+        away_team_id: Away team ID (Phase 1)
         
     Returns:
         Tuple of prediction results for both teams and coordination info
     """
     try:
-        # Calculate base lambdas without corrections
+        # Phase 1 Enhancement: Select opponent-specific parameters if available
+        effective_home_params = home_params
+        effective_away_params = away_params
+        
+        # Apply opponent strength stratification if Phase 1 data is available
+        if season and home_team_id and away_team_id:
+            try:
+                # Home team gets parameters for playing against away team's strength tier
+                effective_home_params = get_segmented_params(
+                    home_params, away_team_id, league_id, season
+                )
+                
+                # Away team gets parameters for playing against home team's strength tier
+                effective_away_params = get_segmented_params(
+                    away_params, home_team_id, league_id, season
+                )
+                
+                print(f"Phase 1 stratification applied: Home team vs opponent tier, Away team vs opponent tier")
+                
+            except Exception as e:
+                print(f"Warning: Opponent stratification failed, using overall parameters: {e}")
+                effective_home_params = home_params
+                effective_away_params = away_params
+        else:
+            print("Phase 1 stratification not available (missing season/team IDs), using overall parameters")
+        
+        # Calculate base lambdas using effective (stratified or overall) parameters
         home_lambda_base = calculate_base_lambda(
-            home_team_parameters, away_team_parameters, home_params, is_home=True
+            home_team_parameters, away_team_parameters, effective_home_params, is_home=True
         )
         away_lambda_base = calculate_base_lambda(
-            home_team_parameters, away_team_parameters, away_params, is_home=False
+            home_team_parameters, away_team_parameters, effective_away_params, is_home=False
         )
         
-        # Apply home advantage
-        league_home_adv = home_params.get('home_adv', 1.31)
+        # Apply home advantage using effective parameters
+        league_home_adv = effective_home_params.get('home_adv', 1.31)
         home_lambda_base *= league_home_adv
         away_lambda_base *= 1/league_home_adv
         
         # Phase 0: Use transition manager to get effective multipliers with contamination prevention
+        # Note: Use original params for multiplier calculation to maintain compatibility
         transition_manager = TransitionManager()
         effective_multipliers = transition_manager.get_effective_multipliers(home_params, away_params)
         
@@ -330,9 +410,9 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
         home_lambda_final = squash_lambda(home_lambda_final)
         away_lambda_final = squash_lambda(away_lambda_final)
         
-        # Calculate probabilities for both teams
-        home_alpha = home_params.get('alpha_home', 0.3)
-        away_alpha = away_params.get('alpha_away', 0.3)
+        # Calculate probabilities using effective (stratified) parameters
+        home_alpha = effective_home_params.get('alpha_home', 0.3)
+        away_alpha = effective_away_params.get('alpha_away', 0.3)
         
         home_goals, home_likelihood, home_probs = calculate_goal_probabilities(home_lambda_final, home_alpha)
         away_goals, away_likelihood, away_probs = calculate_goal_probabilities(away_lambda_final, away_alpha)
@@ -359,7 +439,12 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
             "multiplier_source": effective_multipliers.get('source', 'unknown'),
             "multiplier_strategy": effective_multipliers.get('strategy', 'unknown'),
             "contamination_prevented": effective_multipliers.get('contamination_prevention', 'active'),
-            "prediction_timestamp": int(datetime.now().timestamp())
+            "prediction_timestamp": int(datetime.now().timestamp()),
+            # Phase 1 opponent stratification fields
+            "opponent_stratification_applied": bool(season and home_team_id and away_team_id),
+            "home_params_source": "segmented" if effective_home_params != home_params else "overall",
+            "away_params_source": "segmented" if effective_away_params != away_params else "overall",
+            "phase1_enabled": True
         }
         
         return (home_score_prob, home_goals, home_likelihood, home_probs,

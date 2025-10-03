@@ -6,6 +6,10 @@ Shared constants for the football fixture predictions system.
 API_FOOTBALL_BASE_URL = "https://api-football-v1.p.rapidapi.com/v3"
 API_FOOTBALL_HOST = "api-football-v1.p.rapidapi.com"
 
+# API Keys (should be set via environment variables)
+import os
+RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY', '4c37223acemsh65b1a8b456b72c1p15a99ajsnd4a09ab346a4')
+
 # Retry Configuration
 DEFAULT_MAX_RETRIES = 5
 MIN_WAIT_TIME = 5
