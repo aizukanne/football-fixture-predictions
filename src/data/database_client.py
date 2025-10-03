@@ -1,0 +1,383 @@
+"""
+Database client for interacting with DynamoDB.
+Consolidates all DynamoDB operations with consistent error handling.
+"""
+
+import boto3
+import json
+from boto3.dynamodb.conditions import Key
+from datetime import datetime, timedelta
+
+from ..utils.constants import (
+    GAME_FIXTURES_TABLE,
+    LEAGUE_PARAMETERS_TABLE,
+    TEAM_PARAMETERS_TABLE
+)
+from ..utils.converters import convert_for_dynamodb, decimal_default
+
+
+# Initialize DynamoDB resource
+dynamodb = boto3.resource('dynamodb')
+webFE_table = dynamodb.Table(GAME_FIXTURES_TABLE)
+league_table = dynamodb.Table(LEAGUE_PARAMETERS_TABLE)
+teams_table = dynamodb.Table(TEAM_PARAMETERS_TABLE)
+
+
+def get_team_params_from_db(unique_team_id):
+    """
+    Retrieve team parameters from DynamoDB.
+    
+    Args:
+        unique_team_id: Unique team identifier (format: "{league_id}-{team_id}")
+        
+    Returns:
+        Team parameters dictionary or None if not found
+    """
+    try:
+        response = teams_table.get_item(Key={'team_id': unique_team_id})
+        if 'Item' in response:
+            return response['Item']
+        return None
+    except Exception as e:
+        print(f"Error retrieving team parameters for {unique_team_id}: {e}")
+        return None
+
+
+def get_league_params_from_db(league_id):
+    """
+    Retrieve league parameters from DynamoDB.
+    
+    Args:
+        league_id: League identifier
+        
+    Returns:
+        League parameters dictionary or None if not found
+    """
+    try:
+        response = league_table.get_item(Key={'league_id': league_id})
+        if 'Item' in response:
+            return response['Item']
+        return None
+    except Exception as e:
+        print(f"Error retrieving league parameters for {league_id}: {e}")
+        return None
+
+
+def put_team_parameters(team_id, team_params):
+    """
+    Store team parameters in DynamoDB.
+    
+    Args:
+        team_id: Team identifier
+        team_params: Team parameters dictionary
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Prepare data for DynamoDB
+        item = convert_for_dynamodb(team_params)
+        item['team_id'] = team_id
+        item['timestamp'] = int(datetime.now().timestamp())
+        
+        teams_table.put_item(Item=item)
+        print(f"Successfully stored team parameters for {team_id}")
+        return True
+    except Exception as e:
+        print(f"Error storing team parameters for {team_id}: {e}")
+        return False
+
+
+def put_league_parameters(league_id, league_params):
+    """
+    Store league parameters in DynamoDB.
+    
+    Args:
+        league_id: League identifier
+        league_params: League parameters dictionary
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Prepare data for DynamoDB
+        item = convert_for_dynamodb(league_params)
+        item['league_id'] = league_id
+        item['timestamp'] = int(datetime.now().timestamp())
+        
+        league_table.put_item(Item=item)
+        print(f"Successfully stored league parameters for {league_id}")
+        return True
+    except Exception as e:
+        print(f"Error storing league parameters for {league_id}: {e}")
+        return False
+
+
+def put_fixture_record(fixture_record):
+    """
+    Store fixture record in DynamoDB.
+    
+    Args:
+        fixture_record: Complete fixture data dictionary
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Convert data for DynamoDB storage
+        item = convert_for_dynamodb(fixture_record)
+        
+        webFE_table.put_item(Item=item)
+        print(f"Successfully inserted fixture record with ID: {fixture_record['fixture_id']}")
+        return True
+    except Exception as e:
+        print(f"Failed to insert fixture record into DynamoDB: {e}")
+        return False
+
+
+def query_dynamodb_records(country, league_name, start_time, end_time):
+    """
+    Query DynamoDB records for a specific league within a time range.
+    Originally from checkScores.py.
+    
+    Args:
+        country: Country name
+        league_name: League name
+        start_time: Start timestamp
+        end_time: End timestamp
+        
+    Returns:
+        List of matching records
+    """
+    try:
+        # Query using GSI if available, otherwise scan with filters
+        response = webFE_table.scan(
+            FilterExpression=Key('timestamp').between(start_time, end_time) & 
+                           Key('country').eq(country) & 
+                           Key('league').eq(league_name)
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        print(f"Error querying DynamoDB records: {e}")
+        return []
+
+
+def add_attribute_to_dynamodb_item(fixture_id, attribute_name, attribute_value):
+    """
+    Add or update an attribute in an existing DynamoDB item.
+    Originally from checkScores.py.
+    
+    Args:
+        fixture_id: Fixture identifier
+        attribute_name: Name of the attribute to add/update
+        attribute_value: Value of the attribute
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Convert value for DynamoDB if needed
+        converted_value = convert_for_dynamodb(attribute_value)
+        
+        webFE_table.update_item(
+            Key={'fixture_id': fixture_id},
+            UpdateExpression=f'SET #{attribute_name} = :val',
+            ExpressionAttributeNames={f'#{attribute_name}': attribute_name},
+            ExpressionAttributeValues={':val': converted_value}
+        )
+        print(f"Successfully updated {attribute_name} for fixture {fixture_id}")
+        return True
+    except Exception as e:
+        print(f"Error updating attribute {attribute_name} for fixture {fixture_id}: {e}")
+        return False
+
+
+def fetch_league_parameters(league_id):
+    """
+    Fetch league parameters with error handling.
+    
+    Args:
+        league_id: League identifier
+        
+    Returns:
+        League parameters dictionary or None if not found
+    """
+    try:
+        response = league_table.get_item(Key={'league_id': str(league_id)})
+        if 'Item' in response:
+            return response['Item']
+        else:
+            print(f"No league parameters found for league {league_id}")
+            return None
+    except Exception as e:
+        print(f"Error fetching league parameters for {league_id}: {e}")
+        return None
+
+
+def fetch_league_fixtures(country, league_name, start_time, end_time):
+    """
+    Fetch historical fixtures for a league from DynamoDB.
+    Used for multiplier calculations.
+    
+    Args:
+        country: Country name
+        league_name: League name
+        start_time: Start timestamp
+        end_time: End timestamp
+        
+    Returns:
+        List of fixture records
+    """
+    try:
+        # Use scan with filters - in production, consider using GSI for better performance
+        response = webFE_table.scan(
+            FilterExpression=Key('timestamp').between(start_time, end_time) &
+                           Key('country').eq(country) &
+                           Key('league').eq(league_name),
+            ProjectionExpression='fixture_id, home, away, predictions, alternate_predictions, #date, #timestamp',
+            ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'}
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        print(f"Error fetching league fixtures: {e}")
+        return []
+
+
+def get_team_fixtures(team_id, league_id, limit=50):
+    """
+    Get recent fixtures for a specific team.
+    Used for team-specific multiplier calculations.
+    
+    Args:
+        team_id: Team identifier
+        league_id: League identifier  
+        limit: Maximum number of fixtures to return
+        
+    Returns:
+        List of fixture records for the team
+    """
+    try:
+        # This would typically use a GSI on team_id for better performance
+        response = webFE_table.scan(
+            FilterExpression=(Key('home').attribute_exists() & Key('away').attribute_exists()) &
+                           (Key('home.team_id').eq(team_id) | Key('away.team_id').eq(team_id)) &
+                           Key('league_id').eq(league_id),
+            Limit=limit,
+            ProjectionExpression='fixture_id, home, away, predictions, alternate_predictions, #date, #timestamp',
+            ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'}
+        )
+        return response.get('Items', [])
+    except Exception as e:
+        print(f"Error fetching team fixtures for team {team_id}: {e}")
+        return []
+
+
+def batch_get_fixtures(fixture_ids):
+    """
+    Batch retrieve multiple fixtures by their IDs.
+    
+    Args:
+        fixture_ids: List of fixture IDs to retrieve
+        
+    Returns:
+        List of fixture records
+    """
+    if not fixture_ids:
+        return []
+    
+    try:
+        # DynamoDB batch_get_item has a limit of 100 items
+        fixtures = []
+        for i in range(0, len(fixture_ids), 100):
+            batch = fixture_ids[i:i+100]
+            keys = [{'fixture_id': fid} for fid in batch]
+            
+            response = dynamodb.batch_get_item(
+                RequestItems={
+                    GAME_FIXTURES_TABLE: {
+                        'Keys': keys
+                    }
+                }
+            )
+            
+            fixtures.extend(response.get('Responses', {}).get(GAME_FIXTURES_TABLE, []))
+        
+        return fixtures
+    except Exception as e:
+        print(f"Error in batch get fixtures: {e}")
+        return []
+
+
+def update_fixture_scores(fixture_id, home_goals, away_goals):
+    """
+    Update fixture with final scores.
+    Enhanced functionality from checkScores.py.
+    
+    Args:
+        fixture_id: Fixture identifier
+        home_goals: Home team goals
+        away_goals: Away team goals
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        webFE_table.update_item(
+            Key={'fixture_id': fixture_id},
+            UpdateExpression='SET home_goals = :hg, away_goals = :ag, score_updated = :updated',
+            ExpressionAttributeValues={
+                ':hg': home_goals,
+                ':ag': away_goals,
+                ':updated': int(datetime.now().timestamp())
+            }
+        )
+        print(f"Successfully updated scores for fixture {fixture_id}: {home_goals}-{away_goals}")
+        return True
+    except Exception as e:
+        print(f"Error updating scores for fixture {fixture_id}: {e}")
+        return False
+
+
+def delete_team_parameters(team_id):
+    """
+    Delete team parameters from DynamoDB.
+    
+    Args:
+        team_id: Team identifier to delete
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        teams_table.delete_item(Key={'team_id': team_id})
+        print(f"Successfully deleted team parameters for {team_id}")
+        return True
+    except Exception as e:
+        print(f"Error deleting team parameters for {team_id}: {e}")
+        return False
+
+
+def health_check():
+    """
+    Perform a basic health check on database connections.
+    
+    Returns:
+        Dictionary with health status of each table
+    """
+    health = {}
+    
+    tables = [
+        (GAME_FIXTURES_TABLE, webFE_table),
+        (LEAGUE_PARAMETERS_TABLE, league_table),
+        (TEAM_PARAMETERS_TABLE, teams_table)
+    ]
+    
+    for table_name, table_resource in tables:
+        try:
+            # Simple describe call to check connectivity
+            table_resource.table_status
+            health[table_name] = "healthy"
+        except Exception as e:
+            health[table_name] = f"error: {str(e)}"
+    
+    return health
