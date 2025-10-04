@@ -85,10 +85,66 @@ LEAGUE_PARAMETERS_TABLE = _get_table_name('league_parameters')
 TEAM_PARAMETERS_TABLE = _get_table_name('team_parameters')
 
 # SQS Queue URLs
-FIXTURES_QUEUE_URL = 'https://sqs.eu-west-2.amazonaws.com/985019772236/fixturesQueue'
+# Default queue URL - will be updated by infrastructure setup script
+# Or set via environment variable for different environments
+FIXTURES_QUEUE_URL = os.getenv(
+    'FIXTURES_QUEUE_URL',
+    'https://sqs.eu-west-2.amazonaws.com/{account_id}/football-fixture-predictions'
+    # Note: Replace {account_id} with your AWS account ID or run:
+    # python -m src.infrastructure.create_all_sqs_queues --update-constants
+)
 
 # Default Values
 DEFAULT_LAMBDA_CEILING = 4.0
 MINIMUM_GAMES_THRESHOLD = 10
 MINIMUM_LEAGUE_GAMES = 50
 MAX_SEASON_LOOKBACK = 3
+
+# Fixture Ingestion Configuration
+FIXTURE_INGESTION_SETTINGS = {
+    'default_hours_ahead': 12,
+    'default_days_range': {
+        'monday': 2,
+        'thursday': 3,
+        'default': 2
+    },
+    'rate_limit_wait_seconds': 60,
+    'max_retries': 3
+}
+
+# Queue Configuration
+FIXTURES_QUEUE_CONFIG = {
+    'batch_size': 1,  # Process one league at a time
+    'visibility_timeout': 300,  # 5 minutes
+    'message_retention_period': 1209600  # 14 days
+}
+
+# Required Environment Variables
+REQUIRED_ENV_VARS = [
+    'RAPIDAPI_KEY',
+    'FIXTURES_QUEUE_URL'
+]
+
+# API Service Configuration
+API_SERVICE_CONFIG = {
+    'max_page_size': 1000,
+    'default_page_size': 100,
+    'default_date_range_days': 4,
+    'cache_control_max_age': 300,  # 5 minutes
+    'enable_cors': True
+}
+
+# API Gateway Configuration
+API_GATEWAY_CONFIG = {
+    'rate_limit': 10.0,  # requests per second
+    'burst_limit': 20,  # burst capacity
+    'quota_limit': 10000,  # requests per month
+    'quota_period': 'MONTH'
+}
+
+# API Response Configuration
+API_RESPONSE_CONFIG = {
+    'include_metadata': True,
+    'include_query_info': True,
+    'decimal_places': 2
+}

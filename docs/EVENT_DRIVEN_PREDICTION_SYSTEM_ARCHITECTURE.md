@@ -657,3 +657,127 @@ graph TD
 
 **Document Approval**: ✅ Approved for Implementation  
 **Next Action**: Begin Phase 1 implementation following the detailed checklist above.
+
+---
+
+## 📡 API Service Layer Integration
+
+**Status:** 📋 **Implementation Guide Available** - [`docs/API_SERVICE_IMPLEMENTATION_GUIDE.md`](API_SERVICE_IMPLEMENTATION_GUIDE.md)  
+**Added:** 2025-10-04  
+**Based on:** [`code-samples/analysis_backend_mobile.py`](../code-samples/analysis_backend_mobile.py)
+
+### API Service Architecture
+
+```mermaid
+graph TB
+    subgraph "Prediction Generation Pipeline"
+        FIH[Fixture Ingestion Handler] --> PH[Prediction Handler]
+        PH --> PDB[(Predictions DB<br/>game_fixtures)]
+    end
+    
+    subgraph "API Service Layer"
+        AG[API Gateway<br/>Regional Endpoint] --> ASH[API Service Handler]
+        AUTH[API Key Auth] --> AG
+        RATE[Rate Limiting<br/>10 req/sec] --> AUTH
+        ASH --> QS[Query Service]
+        ASH --> DF[Data Formatter]
+        QS --> PDB
+        QS --> IDX[country-league-index]
+    end
+    
+    subgraph "Frontend Applications"
+        MA[Mobile Apps] --> RATE
+        WA[Web Apps] --> RATE
+        3P[3rd Party APIs] --> RATE
+    end
+    
+    subgraph "Response Flow"
+        DF --> JSON[JSON Response]
+        JSON --> AG
+        AG --> MA
+        AG --> WA
+        AG --> 3P
+    end
+```
+
+### API Features & Endpoints
+
+**Key Capabilities:**
+- ✅ **REST API Endpoints** - Modular architecture based on reference sample
+- ✅ **API Key Authentication** - Secure access control with usage plans
+- ✅ **Flexible Querying** - Single fixture or league-based with date ranges
+- ✅ **Rate Limiting** - 10 req/sec, 20 burst, 10k/month quota
+- ✅ **CORS Support** - Ready for web frontend integration
+- ✅ **Comprehensive Error Handling** - Proper HTTP status codes and messages
+
+**API Endpoints:**
+```
+GET /predictions?fixture_id=123456
+GET /predictions?country=England&league=Premier%20League&startDate=2024-01-01&endDate=2024-01-07
+```
+
+**Response Format:**
+```json
+{
+  "items": [
+    {
+      "fixture_id": 123456,
+      "timestamp": 1704117600,
+      "date": "2024-01-01T15:00:00+00:00",
+      "has_best_bet": true,
+      "home": {
+        "team_id": 1,
+        "team_name": "Team A",
+        "team_logo": "logo_url",
+        "predicted_goals": 1.5,
+        "predicted_goals_alt": 1.3,
+        "home_performance": 0.65
+      },
+      "away": {
+        "team_id": 2,
+        "team_name": "Team B",
+        "team_logo": "logo_url", 
+        "predicted_goals": 0.9,
+        "predicted_goals_alt": 1.1,
+        "away_performance": 0.45
+      }
+    }
+  ],
+  "last_evaluated_key": null,
+  "total_items": 1
+}
+```
+
+### AWS Infrastructure Integration
+
+**Additional Components Required:**
+
+| Component | Purpose | Configuration | Status |
+|-----------|---------|---------------|---------|
+| **API Gateway** | REST API endpoint | Regional endpoint with API key auth | 📋 Ready to deploy |
+| **Usage Plan** | Rate limiting | 10 req/sec, 20 burst, 10k/month quota | 📋 Config provided |
+| **API Keys** | Access control | Separate keys for mobile/web/3rd party | 📋 Setup included |
+| **Lambda Function** | API request processing | 256MB, 30s timeout, Python 3.11 | 📋 Code complete |
+
+**Integration Points:**
+- **Database:** Uses existing `game_fixtures` table with `country-league-index`
+- **Authentication:** API key-based with AWS API Gateway management
+- **Monitoring:** CloudWatch metrics for API Gateway + Lambda
+- **Error Handling:** Standardized JSON error responses with proper HTTP codes
+
+### Implementation Priority
+
+**Phase 3B: API Service Layer (Week 3, Days 4-7)**
+- Deploy API service Lambda function
+- Create and configure API Gateway
+- Set up usage plans and API keys  
+- Test with frontend applications
+- Monitor and optimize performance
+
+**Success Metrics:**
+- ✅ **API Availability:** >99.5% uptime
+- ✅ **Response Time:** <500ms average for fixture queries
+- ✅ **Error Rate:** <1% of requests
+- ✅ **Frontend Integration:** Mobile and web apps successfully consuming API
+
+---
