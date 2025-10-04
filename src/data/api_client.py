@@ -458,6 +458,113 @@ def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIE
     return None
 
 
+def get_coach_by_team(team_id, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Get current coach/manager information for a team.
+
+    Args:
+        team_id: Team identifier
+        max_retries: Maximum retry attempts
+
+    Returns:
+        Coach information dict or None
+
+    Example response:
+        {
+            'id': 1993,
+            'name': 'E. ten Hag',
+            'firstname': 'Erik',
+            'lastname': 'ten Hag',
+            'age': 55,
+            'birth': {'date': '1970-02-02', 'place': 'Haaksbergen', 'country': 'Netherlands'},
+            'nationality': 'Netherlands',
+            'photo': 'https://...',
+            'team': {'id': 33, 'name': 'Manchester United', 'logo': '...'},
+            'career': [...]  # Career history with teams
+        }
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/coachs"
+    params = {"team": str(team_id)}
+
+    data = _make_api_request(url, params, max_retries=max_retries)
+
+    if not data or "response" not in data or not data["response"]:
+        return None
+
+    # Return current coach (should be first in response)
+    coaches = data["response"]
+    if coaches:
+        return coaches[0]  # Most recent/current coach
+
+    return None
+
+
+def get_coach_by_id(coach_id, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Get coach/manager information by coach ID.
+
+    Args:
+        coach_id: Coach identifier
+        max_retries: Maximum retry attempts
+
+    Returns:
+        Coach information dict or None
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/coachs"
+    params = {"id": str(coach_id)}
+
+    data = _make_api_request(url, params, max_retries=max_retries)
+
+    if not data or "response" not in data or not data["response"]:
+        return None
+
+    if data["response"]:
+        return data["response"][0]
+
+    return None
+
+
+def get_fixture_lineups(fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Get lineups for a specific fixture, including coach information.
+
+    Args:
+        fixture_id: Fixture identifier
+        max_retries: Maximum retry attempts
+
+    Returns:
+        Dict with home and away lineups including coach info
+
+    Example response:
+        {
+            'home': {
+                'team': {...},
+                'coach': {'id': 1993, 'name': 'E. ten Hag', 'photo': '...'},
+                'formation': '4-2-3-1',
+                'startXI': [...],
+                'substitutes': [...]
+            },
+            'away': {...}
+        }
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/fixtures/lineups"
+    params = {"fixture": str(fixture_id)}
+
+    data = _make_api_request(url, params, max_retries=max_retries)
+
+    if not data or "response" not in data or not data["response"]:
+        return None
+
+    response = data["response"]
+    if len(response) >= 2:
+        return {
+            'home': response[0],
+            'away': response[1]
+        }
+
+    return None
+
+
 class APIClient:
     """
     Wrapper class for API client functions to maintain compatibility
@@ -496,3 +603,12 @@ class APIClient:
     
     def get_next_fixture(self, team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIES):
         return get_next_fixture(team_id, current_fixture_id, max_retries)
+
+    def get_coach_by_team(self, team_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_coach_by_team(team_id, max_retries)
+
+    def get_coach_by_id(self, coach_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_coach_by_id(coach_id, max_retries)
+
+    def get_fixture_lineups(self, fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_fixture_lineups(fixture_id, max_retries)

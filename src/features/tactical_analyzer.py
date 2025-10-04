@@ -606,7 +606,15 @@ class TacticalAnalyzer:
     def _get_team_manager_data(self, team_id: int, league_id: int, season: int) -> List[Dict]:
         """Get manager-specific tactical data."""
         try:
-            # This would fetch manager tactical preferences
+            # Import manager analyzer
+            from .manager_analyzer import ManagerAnalyzer
+
+            manager_analyzer = ManagerAnalyzer()
+            manager_profile = manager_analyzer.get_manager_profile(team_id, league_id, season)
+
+            if manager_profile and manager_profile.get('manager_id'):
+                return [manager_profile]
+
             return []
         except Exception as e:
             logger.error(f"Error fetching manager data: {e}")
