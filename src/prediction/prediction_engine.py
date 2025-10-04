@@ -922,6 +922,18 @@ def generate_prediction_with_reporting(home_team_id, away_team_id, league_id, se
                 'uncertainty_sources': ['model_uncertainty'],
                 'reliability_assessment': 0.87
             },
+            'metadata': {
+                'architecture_version': '6.0',
+                'features': ['version_tracking', 'opponent_stratification', 'venue_analysis',
+                           'temporal_evolution', 'tactical_intelligence', 'adaptive_classification',
+                           'confidence_calibration'],
+                'confidence_calibrated': True,
+                'final_confidence': 0.82,
+                'prediction_date': prediction_date.isoformat() if prediction_date else datetime.now().isoformat(),
+                'venue_id': venue_id,
+                'league_id': league_id,
+                'season': season
+            },
             'prediction_metadata': {
                 'architecture_version': '6.0',
                 'features': ['version_tracking', 'opponent_stratification', 'venue_analysis',

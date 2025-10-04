@@ -1,0 +1,275 @@
+{
+  "validation_timestamp": "2025-10-04T05:22:57.259622",
+  "system_info": {
+    "cpu_count": 8,
+    "memory_total_gb": 15.62,
+    "python_version": "3.12.3 (main, Aug 14 2025, 17:47:21) [GCC 13.3.0]",
+    "platform": "linux"
+  },
+  "performance_tests": {
+    "accuracy": {
+      "test_start": "2025-10-04T05:22:57.864390",
+      "status": "FAIL",
+      "predictions_tested": 10,
+      "accuracy_metrics": {
+        "avg_quality_score": 0.5,
+        "min_quality_score": 0.5,
+        "max_quality_score": 0.5,
+        "quality_std_dev": 0.0,
+        "consistency_rating": "EXCELLENT"
+      },
+      "benchmark_comparison": {
+        "target_quality": 0.8,
+        "achieved_quality": 0.5,
+        "meets_benchmark": false,
+        "performance_grade": "F"
+      },
+      "test_duration": 0.000269
+    },
+    "response_times": {
+      "test_start": "2025-10-04T05:22:57.864669",
+      "status": "PASS",
+      "response_times": [
+        1.5497207641601562e-05,
+        4.291534423828125e-06,
+        1.71661376953125e-05,
+        3.5762786865234375e-06,
+        8.58306884765625e-06,
+        3.5762786865234375e-06,
+        8.58306884765625e-06,
+        7.3909759521484375e-06,
+        9.775161743164062e-06,
+        3.5762786865234375e-06,
+        8.344650268554688e-06,
+        3.337860107421875e-06,
+        1.1920928955078125e-05,
+        4.0531158447265625e-06,
+        1.239776611328125e-05,
+        3.814697265625e-06,
+        8.106231689453125e-06,
+        3.337860107421875e-06,
+        8.106231689453125e-06,
+        3.5762786865234375e-06
+      ],
+      "sla_metrics": {
+        "avg_response_time": 0.0,
+        "median_response_time": 0.0,
+        "p95_response_time": 0.0,
+        "p99_response_time": 0.0,
+        "max_response_time": 0.0,
+        "min_response_time": 0.0
+      },
+      "performance_breakdown": {
+        "sla_target_seconds": 2.0,
+        "avg_meets_sla": true,
+        "p95_meets_sla": true,
+        "success_rate": 1.0,
+        "performance_grade": "A"
+      },
+      "test_duration": 0.000199
+    },
+    "concurrent_performance": {
+      "test_start": "2025-10-04T05:22:57.864873",
+      "status": "FAIL",
+      "concurrency_levels": {
+        "level_1": {
+          "concurrency_level": 1,
+          "response_times": [
+            2.6702880859375e-05,
+            2.3365020751953125e-05
+          ],
+          "successful_requests": 2,
+          "failed_requests": 0,
+          "start_time": 1759555377.864877,
+          "total_time": 0.0005002021789550781,
+          "avg_response_time": 0.0,
+          "throughput": 3998.38
+        },
+        "level_2": {
+          "concurrency_level": 2,
+          "response_times": [
+            4.553794860839844e-05,
+            1.6450881958007812e-05,
+            3.6716461181640625e-05,
+            1.7404556274414062e-05
+          ],
+          "successful_requests": 4,
+          "failed_requests": 0,
+          "start_time": 1759555377.8654397,
+          "total_time": 0.0006158351898193359,
+          "avg_response_time": 0.0,
+          "throughput": 6495.24
+        },
+        "level_4": {
+          "concurrency_level": 4,
+          "response_times": [
+            1.3828277587890625e-05,
+            8.821487426757812e-06,
+            1.5974044799804688e-05,
+            2.0503997802734375e-05,
+            9.298324584960938e-06,
+            1.4066696166992188e-05,
+            1.5020370483398438e-05,
+            1.1682510375976562e-05
+          ],
+          "successful_requests": 8,
+          "failed_requests": 0,
+          "start_time": 1759555377.8660896,
+          "total_time": 0.0006344318389892578,
+          "avg_response_time": 0.0,
+          "throughput": 12609.71
+        },
+        "level_8": {
+          "concurrency_level": 8,
+          "response_times": [
+            1.1682510375976562e-05,
+            9.298324584960938e-06,
+            8.821487426757812e-06,
+            2.288818359375e-05,
+            2.1457672119140625e-05,
+            9.059906005859375e-06,
+            2.5987625122070312e-05,
+            1.1205673217773438e-05,
+            1.5974044799804688e-05,
+            1.1920928955078125e-05,
+            1.0013580322265625e-05,
+            1.0251998901367188e-05,
+            3.8623809814453125e-05,
+            2.3126602172851562e-05,
+            2.0503997802734375e-05,
+            1.8835067749023438e-05
+          ],
+          "successful_requests": 16,
+          "failed_requests": 0,
+          "start_time": 1759555377.8667586,
+          "total_time": 0.0014002323150634766,
+          "avg_response_time": 0.0,
+          "throughput": 11426.68
+        }
+      },
+      "scalability_metrics": {
+        "throughput_scaling": {
+          "max_throughput_rps": 12609.71,
+          "min_throughput_rps": 3998.38,
+          "improvement_ratio": 3.15,
+          "linear_scaling_expected": 8.0,
+          "scaling_efficiency": 0.39
+        },
+        "response_time_degradation": {
+          "base_response_time": 0.0,
+          "max_response_time": 0.0,
+          "degradation_factor": 1,
+          "acceptable_degradation": true
+        },
+        "scalability_grade": "D"
+      },
+      "test_duration": 0.003345
+    },
+    "memory_usage": {
+      "test_start": "2025-10-04T05:22:57.868225",
+      "status": "PASS",
+      "memory_measurements": [
+        {
+          "test_number": 0,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 1,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 2,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 3,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 4,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 5,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 6,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 7,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 8,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 9,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 10,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 11,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 12,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 13,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        },
+        {
+          "test_number": 14,
+          "memory_before_mb": 135.84,
+          "memory_after_mb": 135.84,
+          "memory_increase_mb": 0.0
+        }
+      ],
+      "memory_analysis": {
+        "baseline_memory_mb": 135.84,
+        "final_memory_mb": 135.84,
+        "total_increase_mb": 0.0,
+        "avg_per_prediction_mb": 0.0,
+        "max_increase_mb": 0.0,
+        "memory_efficiency_grade": "A"
+      },
+      "test_duration": 0.001136
+    }
+  },
+  "overall_grade": "C"
+}

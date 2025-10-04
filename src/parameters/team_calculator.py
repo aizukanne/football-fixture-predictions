@@ -1241,7 +1241,7 @@ def calculate_temporal_parameters(team_id: int, league_id: int, season: int,
 def get_neutral_temporal_params() -> Dict:
     """
     Get neutral temporal parameters when temporal analysis is not available.
-    
+
     Returns:
         Dictionary with neutral temporal parameters (no temporal adjustments)
     """
@@ -1252,18 +1252,118 @@ def get_neutral_temporal_params() -> Dict:
         'momentum_factor': Decimal('1.0'),       # No momentum adjustment
         'fixture_congestion': Decimal('1.0'),    # No congestion impact
         'form_confidence': Decimal('0.3'),       # Low confidence
-        
+
         # Neutral metadata
         'form_trend': 'stable',
         'seasonal_trend': 'consistent',
         'key_players_out': [],
         'matches_analyzed': 0,
-        
+
         # Temporal analysis metadata
         'temporal_version': '3.0',
         'analysis_timestamp': int(datetime.now().timestamp()),
         'temporal_features_enabled': False
     }
+
+
+def get_neutral_tactical_params() -> Dict:
+    """
+    Get neutral tactical parameters when tactical analysis is not available.
+
+    Returns:
+        Dictionary with neutral tactical parameters (no tactical adjustments)
+    """
+    return {
+        'preferred_formation': '4-4-2',
+        'formation_confidence': Decimal('0.3'),
+        'tactical_consistency': Decimal('0.5'),
+
+        # Neutral tactical style scores (0-10 scale, 5 is neutral)
+        'possession_style': Decimal('5.0'),
+        'attacking_intensity': Decimal('5.0'),
+        'defensive_solidity': Decimal('5.0'),
+        'counter_efficiency': Decimal('5.0'),
+        'pressing_intensity': Decimal('5.0'),
+        'build_up_speed': Decimal('5.0'),
+        'width_usage': Decimal('5.0'),
+        'aerial_preference': Decimal('5.0'),
+
+        # Formation effectiveness
+        'formation_effectiveness': Decimal('5.0'),
+        'formation_attacking_bonus': Decimal('1.0'),
+        'formation_defensive_bonus': Decimal('1.0'),
+
+        # Tactical analysis metadata
+        'tactical_version': '4.0',
+        'analysis_timestamp': int(datetime.now().timestamp()),
+        'tactical_features_enabled': False,
+        'formations_analyzed': 0
+    }
+
+
+def calculate_tactical_parameters(team_id: int, league_id: int, season: int,
+                                  prediction_date: datetime) -> Dict:
+    """
+    Calculate tactical parameters for a team using Phase 4 tactical intelligence.
+
+    Args:
+        team_id: Team identifier
+        league_id: League identifier
+        season: Season for analysis
+        prediction_date: Date for temporal context
+
+    Returns:
+        Dictionary with tactical parameters including formation preferences,
+        tactical style scores, and formation effectiveness metrics
+    """
+    try:
+        # Initialize tactical analyzer
+        tactical_analyzer = TacticalAnalyzer()
+        formation_analyzer = FormationAnalyzer()
+
+        # Get formation preferences
+        formation_prefs = analyze_team_formation_preferences(team_id, league_id, season)
+        preferred_formation = formation_prefs.get('most_used_formation', '4-4-2')
+        formation_confidence = formation_prefs.get('formation_consistency', 0.5)
+
+        # Calculate tactical style scores
+        tactical_scores = calculate_tactical_style_scores(team_id, league_id, season)
+
+        # Get formation effectiveness
+        formation_effectiveness = formation_analyzer.analyze_formation_effectiveness(
+            team_id, preferred_formation, league_id, season
+        )
+
+        return {
+            'preferred_formation': preferred_formation,
+            'formation_confidence': Decimal(str(formation_confidence)),
+            'tactical_consistency': Decimal(str(formation_prefs.get('tactical_consistency', 0.5))),
+
+            # Tactical style scores (0-10 scale)
+            'possession_style': Decimal(str(tactical_scores.get('possession_style', 5.0))),
+            'attacking_intensity': Decimal(str(tactical_scores.get('attacking_intensity', 5.0))),
+            'defensive_solidity': Decimal(str(tactical_scores.get('defensive_solidity', 5.0))),
+            'counter_efficiency': Decimal(str(tactical_scores.get('counter_efficiency', 5.0))),
+            'pressing_intensity': Decimal(str(tactical_scores.get('pressing_intensity', 5.0))),
+            'build_up_speed': Decimal(str(tactical_scores.get('build_up_speed', 5.0))),
+            'width_usage': Decimal(str(tactical_scores.get('width_usage', 5.0))),
+            'aerial_preference': Decimal(str(tactical_scores.get('aerial_preference', 5.0))),
+
+            # Formation effectiveness
+            'formation_effectiveness': Decimal(str(formation_effectiveness.get('effectiveness_score', 5.0))),
+            'formation_attacking_bonus': Decimal(str(formation_effectiveness.get('attacking_bonus', 1.0))),
+            'formation_defensive_bonus': Decimal(str(formation_effectiveness.get('defensive_bonus', 1.0))),
+
+            # Tactical analysis metadata
+            'tactical_version': '4.0',
+            'analysis_timestamp': int(prediction_date.timestamp()),
+            'tactical_features_enabled': True,
+            'formations_analyzed': formation_prefs.get('formations_count', 1)
+        }
+
+    except Exception as e:
+        print(f"Error calculating tactical parameters: {e}")
+        return get_neutral_tactical_params()
 
 
 def apply_temporal_adjustments_to_params(base_params: Dict, temporal_params: Dict) -> Dict:
