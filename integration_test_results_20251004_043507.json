@@ -1,0 +1,105 @@
+{
+  "overall_status": "FAIL",
+  "phase_results": {
+    "phase_0": {
+      "status": "PASS",
+      "current_version": "6.0",
+      "version_features": [
+        "contamination_prevention",
+        "hierarchical_fallback"
+      ],
+      "multiplier_calculation": "functional",
+      "multiplier_keys": [
+        "home_multiplier",
+        "away_multiplier",
+        "total_multiplier",
+        "confidence",
+        "sample_size",
+        "architecture_version",
+        "calculation_timestamp",
+        "default_reason",
+        "contamination_prevented",
+        "strategy",
+        "team_id",
+        "league_id",
+        "season"
+      ]
+    },
+    "phase_1": {
+      "status": "PASS",
+      "opponent_classification": "functional",
+      "tier_extraction": "functional",
+      "test_classification_result": "unknown",
+      "test_tier_result": "middle"
+    },
+    "phase_2": {
+      "status": "FAIL",
+      "error": "'VenueAnalyzer' object has no attribute 'analyze_venue_factors'"
+    },
+    "phase_3": {
+      "status": "FAIL",
+      "error": "analyze_head_to_head_form() got an unexpected keyword argument 'team1_id'"
+    },
+    "phase_4": {
+      "status": "PASS",
+      "tactical_analysis": "functional",
+      "formation_analysis": "functional",
+      "matchup_analysis": "functional"
+    },
+    "phase_5": {
+      "status": "FAIL",
+      "error": "calculate_adaptive_weights() missing 1 required positional argument: 'match_context'"
+    },
+    "phase_6": {
+      "status": "FAIL",
+      "error": "calculate_adaptive_confidence() got an unexpected keyword argument 'factors'"
+    }
+  },
+  "integration_results": {
+    "pipeline": {
+      "status": "FAIL",
+      "pipeline_functional": false,
+      "has_predictions": true,
+      "has_metadata": false,
+      "has_insights": true,
+      "expected_features": [
+        "version_tracking",
+        "opponent_stratification",
+        "venue_analysis",
+        "temporal_evolution",
+        "tactical_intelligence",
+        "adaptive_classification",
+        "confidence_calibration"
+      ],
+      "prediction_keys": [
+        "predictions",
+        "confidence_analysis",
+        "prediction_metadata",
+        "insights"
+      ]
+    }
+  },
+  "performance_metrics": {
+    "status": "PASS",
+    "avg_prediction_time": 0.0,
+    "max_threshold": 3.0,
+    "predictions_tested": 5,
+    "total_time": 0.0,
+    "performance_grade": "A"
+  },
+  "production_readiness": {
+    "status": "PASS",
+    "readiness_checks": {
+      "module_imports": "PASS",
+      "error_handling": "PASS",
+      "version_consistency": "PASS",
+      "system_monitoring": "PASS"
+    },
+    "passed_checks": 4,
+    "total_checks": 4,
+    "pass_rate": 1.0,
+    "deployment_ready": true
+  },
+  "test_timestamp": "2025-10-04T04:35:06.277620",
+  "system_version": "6.0"
+}

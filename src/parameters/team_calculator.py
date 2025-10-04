@@ -15,6 +15,7 @@ import pandas as pd
 from collections import Counter
 from decimal import Decimal
 from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
 from ..statistics.distributions import nb_probs
 from ..statistics.optimization import tune_weights_grid_team
@@ -35,12 +36,16 @@ from ..features.temporal_weighting import apply_temporal_weightings, calculate_f
 from ..features.tactical_analyzer import TacticalAnalyzer, calculate_tactical_style_scores, analyze_team_formation_preferences
 from ..features.formation_analyzer import FormationAnalyzer
 from ..data.tactical_data_collector import TacticalDataCollector
+# Phase 5 team classification imports
+from ..features.team_classifier import classify_team_archetype, get_team_performance_profile, get_archetype_prediction_weights
+from ..features.strategy_router import calculate_adaptive_weights
+from ..features.archetype_analyzer import analyze_performance_consistency
 
 
 def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     """
     Calculate team-specific parameters from match data with version tracking, opponent stratification,
-    venue analysis, and temporal evolution.
+    venue analysis, temporal evolution, and team classification.
     If insufficient data, use league parameters.
     
     Enhanced with:
@@ -48,6 +53,8 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     - Phase 1 opponent strength stratification for segmented parameters
     - Phase 2 venue-specific analysis for stadium advantages and travel impact
     - Phase 3 temporal evolution for time-aware parameter adjustments
+    - Phase 4 tactical intelligence for formation and style analysis
+    - Phase 5 team classification for adaptive strategy routing
     
     Args:
         df: DataFrame containing match data with team IDs and dates
@@ -73,6 +80,15 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
                 'momentum_factor': Decimal,       # Win/loss streak impact (0.9-1.1)
                 'fixture_congestion': Decimal,    # Congestion fatigue factor (0.95-1.0)
                 'form_confidence': Decimal        # Confidence in form assessment (0.0-1.0)
+            },
+            'tactical_params': {tactical intelligence parameters},
+            'classification_params': {
+                'archetype': str,                 # Team's primary archetype
+                'archetype_confidence': Decimal, # Confidence in classification
+                'performance_profile': Dict,     # Multi-dimensional performance profile
+                'prediction_weights': Dict,      # Archetype-specific phase weights
+                'consistency_metrics': Dict,     # Performance consistency analysis
+                'archetype_adjustments': Dict    # Parameter adjustments based on archetype
             }
         }
     """
@@ -298,7 +314,21 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     else:
         tactical_params = get_neutral_tactical_params()
     
-    # Return enhanced structure with overall, segmented, venue, temporal, and tactical parameters
+    # Phase 5 Enhancement: Calculate team classification parameters
+    classification_params = {}
+    if season and not df.empty and len(df) >= MINIMUM_GAMES_THRESHOLD:
+        try:
+            classification_params = calculate_classification_parameters(
+                team_id, league_id, season, prediction_date or datetime.now()
+            )
+        except Exception as e:
+            print(f"Warning: Failed to calculate classification parameters for team {team_id}: {e}")
+            print("Using neutral classification parameters")
+            classification_params = get_neutral_classification_params()
+    else:
+        classification_params = get_neutral_classification_params()
+    
+    # Return enhanced structure with overall, segmented, venue, temporal, tactical, and classification parameters
     return {
         # Maintain backward compatibility by keeping overall parameters at root level
         **overall_params,
@@ -315,6 +345,9 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
         # Phase 4 enhancement: tactical parameters
         'tactical_params': tactical_params,
         
+        # Phase 5 enhancement: classification parameters
+        'classification_params': classification_params,
+        
         # Metadata about enhancements
         'segmentation_enabled': bool(season and not df.empty),
         'segmentation_version': '1.0',
@@ -323,7 +356,9 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
         'temporal_analysis_enabled': bool(season and not df.empty),
         'temporal_analysis_version': '3.0',
         'tactical_analysis_enabled': bool(season and not df.empty),
-        'tactical_analysis_version': '4.0'
+        'tactical_analysis_version': '4.0',
+        'classification_enabled': bool(season and not df.empty),
+        'classification_version': '5.0'
     }
 
 
@@ -1296,7 +1331,7 @@ def apply_temporal_adjustments_to_params(base_params: Dict, temporal_params: Dic
 
 
 def get_temporal_multiplier_for_prediction(team_id: int, league_id: int, season: int,
-                                         prediction_date: datetime) -> Decimal:
+                                         prediction_date: datetime = None) -> Decimal:
     """
     Get a single temporal multiplier for quick prediction adjustments.
     
@@ -1342,4 +1377,391 @@ def get_temporal_multiplier_for_prediction(team_id: int, league_id: int, season:
         
     except Exception as e:
         print(f"Error calculating temporal multiplier for team {team_id}: {e}")
+        return Decimal('1.0')
+
+
+# ============================================================================
+# PHASE 5: TEAM CLASSIFICATION & ADAPTIVE STRATEGY FUNCTIONS
+# ============================================================================
+
+def calculate_classification_parameters(team_id: int, league_id: int, season: int, 
+                                      prediction_date: datetime) -> Dict:
+    """
+    Calculate team classification parameters for Phase 5 adaptive strategy routing.
+    
+    This function integrates team archetype classification with performance analysis
+    to provide intelligence for adaptive prediction strategies.
+    
+    Args:
+        team_id: Team identifier
+        league_id: League identifier  
+        season: Season year
+        prediction_date: Date for analysis context
+        
+    Returns:
+        Dict containing classification parameters:
+        {
+            'archetype': str,                   # Team's primary archetype
+            'archetype_confidence': Decimal,    # Confidence in classification
+            'secondary_traits': List[str],      # Additional characteristics
+            'performance_profile': Dict,        # Multi-dimensional performance profile
+            'prediction_weights': Dict,         # Archetype-specific phase weights
+            'consistency_metrics': Dict,        # Performance consistency analysis
+            'archetype_adjustments': Dict,      # Parameter adjustments based on archetype
+            'evolution_trend': str              # How classification is changing over time
+        }
+    """
+    try:
+        print(f"Calculating classification parameters for team {team_id}")
+        
+        # Phase 5: Team archetype classification
+        team_classification = classify_team_archetype(team_id, league_id, season)
+        
+        # Get comprehensive performance profile
+        performance_profile = get_team_performance_profile(team_id, league_id, season)
+        
+        # Get archetype-specific prediction weights
+        prediction_weights = get_archetype_prediction_weights(team_classification['primary_archetype'])
+        
+        # Analyze performance consistency
+        consistency_metrics = analyze_performance_consistency(team_id, league_id, season)
+        
+        # Calculate archetype-specific adjustments
+        archetype_adjustments = calculate_archetype_adjustments(
+            team_classification['primary_archetype'],
+            performance_profile,
+            consistency_metrics
+        )
+        
+        # Prepare classification parameters
+        classification_params = {
+            'archetype': team_classification['primary_archetype'],
+            'archetype_confidence': team_classification['archetype_confidence'],
+            'secondary_traits': team_classification.get('secondary_traits', []),
+            'performance_profile': performance_profile,
+            'prediction_weights': prediction_weights,
+            'consistency_metrics': consistency_metrics,
+            'archetype_adjustments': archetype_adjustments,
+            'evolution_trend': team_classification.get('evolution_trend', 'stable'),
+            'archetype_stability': team_classification.get('archetype_stability', Decimal('0.7')),
+            'classification_metadata': {
+                'classification_date': prediction_date,
+                'season': season,
+                'version': '5.0'
+            }
+        }
+        
+        print(f"Team {team_id} classified as {team_classification['primary_archetype']} "
+              f"with confidence {team_classification['archetype_confidence']}")
+        
+        return classification_params
+        
+    except Exception as e:
+        print(f"Error calculating classification parameters for team {team_id}: {e}")
+        return get_neutral_classification_params()
+
+
+def calculate_archetype_adjustments(archetype: str, performance_profile: Dict, 
+                                  consistency_metrics: Dict) -> Dict:
+    """
+    Calculate parameter adjustments based on team archetype.
+    
+    Each archetype gets specific multipliers and adjustments that reflect
+    their behavioral patterns and prediction characteristics.
+    
+    Args:
+        archetype: Team's primary archetype
+        performance_profile: Team's performance profile
+        consistency_metrics: Performance consistency analysis
+        
+    Returns:
+        Dict with archetype-specific parameter adjustments
+    """
+    try:
+        # Base adjustments for each archetype
+        archetype_base_adjustments = {
+            'ELITE_CONSISTENT': {
+                'confidence_multiplier': 1.1,      # Higher confidence in predictions
+                'variance_adjustment': 0.9,         # Lower variance (more predictable)
+                'context_sensitivity': 0.8,         # Less sensitive to context changes
+                'quality_boost': 1.05,              # Slight quality parameter boost
+                'consistency_bonus': 0.05           # Bonus for consistent performance
+            },
+            'TACTICAL_SPECIALISTS': {
+                'confidence_multiplier': 0.9,       # Moderate confidence
+                'variance_adjustment': 1.1,         # Slightly higher variance
+                'context_sensitivity': 1.2,         # More sensitive to tactical matchups
+                'tactical_weight_boost': 1.3,       # Emphasize tactical analysis
+                'formation_dependency': 1.2         # Higher dependency on formation analysis
+            },
+            'MOMENTUM_DEPENDENT': {
+                'confidence_multiplier': 0.8,       # Lower base confidence
+                'variance_adjustment': 1.3,         # High variance (streaky)
+                'context_sensitivity': 1.4,         # Very sensitive to form/momentum
+                'temporal_weight_boost': 1.4,       # Emphasize temporal analysis
+                'streak_sensitivity': 1.5           # High sensitivity to winning/losing streaks
+            },
+            'HOME_FORTRESS': {
+                'confidence_multiplier': 1.0,       # Standard confidence
+                'variance_adjustment': 1.0,         # Standard variance
+                'context_sensitivity': 1.2,         # Sensitive to venue context
+                'venue_weight_boost': 1.5,          # Heavy emphasis on venue analysis
+                'home_away_differential': 1.8       # Large home/away performance difference
+            },
+            'BIG_GAME_SPECIALISTS': {
+                'confidence_multiplier': 0.9,       # Moderate confidence
+                'variance_adjustment': 1.2,         # Higher variance
+                'context_sensitivity': 1.3,         # Sensitive to opponent strength
+                'opponent_weight_boost': 1.4,       # Emphasize opponent analysis
+                'motivation_factor': 1.3            # Performance varies by game importance
+            },
+            'UNPREDICTABLE_CHAOS': {
+                'confidence_multiplier': 0.7,       # Low confidence
+                'variance_adjustment': 1.5,         # Very high variance
+                'context_sensitivity': 1.1,         # Moderate context sensitivity
+                'uncertainty_boost': 1.4,           # Increase uncertainty bands
+                'randomness_factor': 1.3            # Account for unpredictable elements
+            }
+        }
+        
+        # Get base adjustments for this archetype
+        base_adjustments = archetype_base_adjustments.get(archetype, 
+                                                         archetype_base_adjustments['UNPREDICTABLE_CHAOS'])
+        
+        # Apply performance-based modifications
+        performance_modifiers = {}
+        
+        # Adjust based on attacking profile
+        attacking_profile = performance_profile.get('attacking_profile', {})
+        if attacking_profile:
+            goal_consistency = float(attacking_profile.get('goal_scoring_consistency', 0.6))
+            if goal_consistency > 0.8:
+                performance_modifiers['attacking_consistency_bonus'] = 1.05
+            elif goal_consistency < 0.4:
+                performance_modifiers['attacking_inconsistency_penalty'] = 0.95
+        
+        # Adjust based on defensive profile  
+        defensive_profile = performance_profile.get('defensive_profile', {})
+        if defensive_profile:
+            defensive_stability = float(defensive_profile.get('defensive_stability', 0.5))
+            if defensive_stability > 0.7:
+                performance_modifiers['defensive_stability_bonus'] = 1.03
+            elif defensive_stability < 0.3:
+                performance_modifiers['defensive_instability_penalty'] = 0.97
+        
+        # Adjust based on consistency metrics
+        overall_variance = float(consistency_metrics.get('overall_variance', 0.5))
+        if overall_variance < 0.3:  # Very consistent
+            performance_modifiers['high_consistency_boost'] = 1.08
+        elif overall_variance > 0.7:  # Very inconsistent
+            performance_modifiers['high_variance_penalty'] = 0.92
+        
+        # Combine base adjustments with performance modifiers
+        final_adjustments = {**base_adjustments, **performance_modifiers}
+        
+        # Add metadata
+        final_adjustments['archetype_source'] = archetype
+        final_adjustments['performance_factors_applied'] = len(performance_modifiers)
+        final_adjustments['adjustment_confidence'] = min(1.0, 
+                                                        float(consistency_metrics.get('overall_variance', 0.5)) + 0.3)
+        
+        return final_adjustments
+        
+    except Exception as e:
+        print(f"Error calculating archetype adjustments for {archetype}: {e}")
+        return {
+            'confidence_multiplier': 1.0,
+            'variance_adjustment': 1.0,
+            'context_sensitivity': 1.0,
+            'error': str(e)
+        }
+
+
+def get_neutral_classification_params() -> Dict:
+    """
+    Get neutral classification parameters for fallback cases.
+    
+    Used when team classification fails or insufficient data is available.
+    Provides safe default values that won't negatively impact predictions.
+    
+    Returns:
+        Dict with neutral classification parameters
+    """
+    from decimal import Decimal
+    
+    return {
+        'archetype': 'UNPREDICTABLE_CHAOS',  # Most conservative classification
+        'archetype_confidence': Decimal('0.5'),
+        'secondary_traits': [],
+        'performance_profile': {
+            'attacking_profile': {
+                'goal_scoring_consistency': Decimal('0.6'),
+                'big_game_performance': Decimal('0.5'),
+                'creativity_index': Decimal('0.6'),
+                'clinical_finishing': Decimal('0.5')
+            },
+            'defensive_profile': {
+                'defensive_stability': Decimal('0.5'),
+                'pressure_resistance': Decimal('0.5'),
+                'set_piece_defending': Decimal('0.6'),
+                'recovery_ability': Decimal('0.5')
+            },
+            'mentality_profile': {
+                'home_fortress_mentality': Decimal('0.6'),
+                'away_resilience': Decimal('0.4'),
+                'comeback_ability': Decimal('0.5'),
+                'big_match_temperament': Decimal('0.5')
+            },
+            'tactical_profile': {
+                'tactical_flexibility': Decimal('0.6'),
+                'adaptation_speed': Decimal('0.5'),
+                'system_dependence': Decimal('0.4'),
+                'player_versatility': Decimal('0.5')
+            }
+        },
+        'prediction_weights': {
+            'opponent_weight': Decimal('1.0'),
+            'venue_weight': Decimal('1.0'),
+            'temporal_weight': Decimal('1.0'),
+            'tactical_weight': Decimal('1.0'),
+            'base_confidence': Decimal('0.55')
+        },
+        'consistency_metrics': {
+            'overall_variance': Decimal('0.5'),
+            'context_consistency': {
+                'vs_strong_opponents': Decimal('0.5'),
+                'vs_weak_opponents': Decimal('0.5'),
+                'home_consistency': Decimal('0.6'),
+                'away_consistency': Decimal('0.4'),
+                'monthly_consistency': {}
+            },
+            'streak_analysis': {
+                'max_winning_streak': 0,
+                'max_losing_streak': 0,
+                'streak_frequency': Decimal('0.3'),
+                'streak_recovery': Decimal('0.6')
+            }
+        },
+        'archetype_adjustments': {
+            'confidence_multiplier': 1.0,
+            'variance_adjustment': 1.0,
+            'context_sensitivity': 1.0,
+            'uncertainty_boost': 1.0,
+            'fallback_used': True
+        },
+        'evolution_trend': 'stable',
+        'archetype_stability': Decimal('0.5'),
+        'classification_metadata': {
+            'classification_date': datetime.now(),
+            'fallback_reason': 'insufficient_data_or_error',
+            'version': '5.0'
+        }
+    }
+
+
+def apply_classification_adjustments_to_params(base_params: Dict, classification_params: Dict) -> Dict:
+    """
+    Apply classification-based adjustments to team parameters.
+    
+    This function modifies base team parameters based on the team's archetype
+    and classification characteristics to improve prediction accuracy.
+    
+    Args:
+        base_params: Base team parameters
+        classification_params: Team classification parameters
+        
+    Returns:
+        Dict with classification-adjusted parameters
+    """
+    try:
+        adjusted_params = base_params.copy()
+        archetype_adjustments = classification_params.get('archetype_adjustments', {})
+        
+        if not archetype_adjustments:
+            return adjusted_params
+        
+        # Apply confidence multiplier
+        confidence_multiplier = archetype_adjustments.get('confidence_multiplier', 1.0)
+        
+        # Apply variance adjustment
+        variance_adjustment = archetype_adjustments.get('variance_adjustment', 1.0)
+        
+        # Adjust scoring parameters
+        scoring_params = ['mu', 'mu_home', 'mu_away']
+        for param in scoring_params:
+            if param in adjusted_params:
+                current_value = float(adjusted_params[param])
+                adjusted_value = current_value * confidence_multiplier
+                adjusted_params[param] = round(adjusted_value, 4)
+        
+        # Adjust variance parameters
+        variance_params = ['variance_home', 'variance_away']
+        for param in variance_params:
+            if param in adjusted_params:
+                current_value = float(adjusted_params[param])
+                adjusted_value = current_value * variance_adjustment
+                adjusted_params[param] = round(adjusted_value, 4)
+        
+        # Apply archetype-specific boosts
+        archetype = classification_params.get('archetype', 'UNKNOWN')
+        if archetype == 'ELITE_CONSISTENT':
+            quality_boost = archetype_adjustments.get('quality_boost', 1.0)
+            for param in scoring_params:
+                if param in adjusted_params:
+                    current_value = float(adjusted_params[param])
+                    adjusted_params[param] = round(current_value * quality_boost, 4)
+        
+        elif archetype == 'HOME_FORTRESS':
+            home_boost = archetype_adjustments.get('home_away_differential', 1.0)
+            if 'mu_home' in adjusted_params:
+                current_value = float(adjusted_params['mu_home'])
+                adjusted_params['mu_home'] = round(current_value * home_boost, 4)
+            # Reduce away performance
+            if 'mu_away' in adjusted_params:
+                current_value = float(adjusted_params['mu_away'])
+                adjusted_params['mu_away'] = round(current_value / home_boost, 4)
+        
+        # Add classification adjustment metadata
+        adjusted_params['classification_adjustment_applied'] = True
+        adjusted_params['archetype_applied'] = archetype
+        adjusted_params['confidence_multiplier_applied'] = confidence_multiplier
+        adjusted_params['variance_adjustment_applied'] = variance_adjustment
+        
+        return adjusted_params
+        
+    except Exception as e:
+        print(f"Error applying classification adjustments: {e}")
+        return base_params
+
+
+def get_classification_multiplier_for_prediction(team_id: int, league_id: int, season: int) -> Decimal:
+    """
+    Get a single classification multiplier for quick prediction adjustments.
+    
+    This provides a simplified interface for applying archetype-based adjustments
+    without needing the full classification parameter structure.
+    
+    Args:
+        team_id: Team identifier
+        league_id: League identifier
+        season: Season year
+        
+    Returns:
+        Decimal: Classification-based multiplier (typically 0.7-1.1 range)
+    """
+    try:
+        classification_params = calculate_classification_parameters(
+            team_id, league_id, season, datetime.now()
+        )
+        
+        archetype_adjustments = classification_params.get('archetype_adjustments', {})
+        confidence_multiplier = archetype_adjustments.get('confidence_multiplier', 1.0)
+        
+        # Clamp to reasonable bounds
+        final_multiplier = max(0.7, min(1.1, confidence_multiplier))
+        
+        return Decimal(str(round(final_multiplier, 3)))
+        
+    except Exception as e:
+        print(f"Error calculating classification multiplier for team {team_id}: {e}")
         return Decimal('1.0')

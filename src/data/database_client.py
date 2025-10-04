@@ -16,11 +16,24 @@ from ..utils.constants import (
 from ..utils.converters import convert_for_dynamodb, decimal_default
 
 
-# Initialize DynamoDB resource
-dynamodb = boto3.resource('dynamodb')
-webFE_table = dynamodb.Table(GAME_FIXTURES_TABLE)
-league_table = dynamodb.Table(LEAGUE_PARAMETERS_TABLE)
-teams_table = dynamodb.Table(TEAM_PARAMETERS_TABLE)
+def _get_dynamodb_resource():
+    """Get DynamoDB resource with timeout and error handling for testing."""
+    try:
+        # Add timeout for testing environments
+        import botocore.config
+        config = botocore.config.Config(
+            read_timeout=5,
+            connect_timeout=5,
+            retries={'max_attempts': 1}
+        )
+        return boto3.resource('dynamodb', config=config)
+    except Exception as e:
+        print(f"Warning: Could not connect to DynamoDB: {e}")
+        return None
+
+
+# Export dynamodb for backward compatibility
+dynamodb = _get_dynamodb_resource()
 
 
 def get_team_params_from_db(unique_team_id):
@@ -34,6 +47,11 @@ def get_team_params_from_db(unique_team_id):
         Team parameters dictionary or None if not found
     """
     try:
+        dynamodb = _get_dynamodb_resource()
+        if not dynamodb:
+            return None
+            
+        teams_table = dynamodb.Table(TEAM_PARAMETERS_TABLE)
         response = teams_table.get_item(Key={'team_id': unique_team_id})
         if 'Item' in response:
             return response['Item']
@@ -54,6 +72,11 @@ def get_league_params_from_db(league_id):
         League parameters dictionary or None if not found
     """
     try:
+        dynamodb = _get_dynamodb_resource()
+        if not dynamodb:
+            return None
+            
+        league_table = dynamodb.Table(LEAGUE_PARAMETERS_TABLE)
         response = league_table.get_item(Key={'league_id': league_id})
         if 'Item' in response:
             return response['Item']
@@ -381,3 +404,72 @@ def health_check():
             health[table_name] = f"error: {str(e)}"
     
     return health
+
+
+class DatabaseClient:
+    """
+    Wrapper class for database client functions to maintain compatibility
+    with feature modules that expect a class interface.
+    """
+    
+    def __init__(self):
+        pass
+    
+    def get_team_params_from_db(self, unique_team_id):
+        return get_team_params_from_db(unique_team_id)
+    
+    def get_league_params_from_db(self, league_id):
+        return get_league_params_from_db(league_id)
+    
+    def put_team_parameters(self, team_id, team_params):
+        return put_team_parameters(team_id, team_params)
+    
+    def put_league_parameters(self, league_id, league_params):
+        return put_league_parameters(league_id, league_params)
+    
+    def put_fixture_record(self, fixture_record):
+        return put_fixture_record(fixture_record)
+    
+    def query_dynamodb_records(self, country, league_name, start_time, end_time):
+        return query_dynamodb_records(country, league_name, start_time, end_time)
+    
+    def add_attribute_to_dynamodb_item(self, fixture_id, attribute_name, attribute_value):
+        return add_attribute_to_dynamodb_item(fixture_id, attribute_name, attribute_value)
+    
+    def fetch_league_parameters(self, league_id):
+        return fetch_league_parameters(league_id)
+    
+    def fetch_league_fixtures(self, country, league_name, start_time, end_time):
+        return fetch_league_fixtures(country, league_name, start_time, end_time)
+    
+    def get_team_fixtures(self, team_id, league_id, limit=50):
+        return get_team_fixtures(team_id, league_id, limit)
+    
+    def batch_get_fixtures(self, fixture_ids):
+        return batch_get_fixtures(fixture_ids)
+    
+    def update_fixture_scores(self, fixture_id, home_goals, away_goals):
+        return update_fixture_scores(fixture_id, home_goals, away_goals)
+    
+    def delete_team_parameters(self, team_id):
+        return delete_team_parameters(team_id)
+    
+    def health_check(self):
+        return health_check()
+
+
+# Convenience function to get DynamoDB table directly (for compatibility)
+def get_dynamodb_table(table_name=None):
+    """
+    Get DynamoDB table resource for direct table operations.
+    Maintains compatibility with modules that expect this function.
+    """
+    if table_name == GAME_FIXTURES_TABLE or table_name is None:
+        return webFE_table
+    elif table_name == LEAGUE_PARAMETERS_TABLE:
+        return league_table
+    elif table_name == TEAM_PARAMETERS_TABLE:
+        return teams_table
+    else:
+        # Return a general table reference
+        return dynamodb.Table(table_name)

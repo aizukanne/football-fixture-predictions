@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from decimal import Decimal
 from datetime import datetime, timedelta
 import boto3
-from statistics import mean, stdev
+import statistics
 import math
 from collections import defaultdict, Counter
 import logging
@@ -26,7 +26,6 @@ import logging
 from ..infrastructure.version_manager import VersionManager
 from ..data.api_client import APIClient
 from ..data.database_client import DatabaseClient
-from ..utils.constants import LEAGUES
 
 logger = logging.getLogger(__name__)
 
@@ -724,6 +723,53 @@ class TacticalAnalyzer:
 
 
 # Convenience functions for easy integration
+
+def analyze_tactical_style(team_id: int, league_id: int, season: int) -> Dict:
+    """
+    Analyze team's tactical style - main entry point for Phase 4 tactical analysis.
+    
+    This is the main function called by the integration tests and prediction engine
+    to get comprehensive tactical analysis for style-based parameter adjustments.
+    
+    Args:
+        team_id: Team identifier
+        league_id: League identifier
+        season: Season year (e.g., 2024)
+        
+    Returns:
+        dict: Comprehensive tactical analysis including formation preferences,
+              style scores, and tactical flexibility
+    """
+    try:
+        # Get formation preferences
+        formation_analysis = analyze_team_formation_preferences(team_id, league_id, season)
+        
+        # Get tactical style scores
+        style_scores = calculate_tactical_style_scores(team_id, league_id, season)
+        
+        # Get tactical flexibility
+        flexibility = analyze_tactical_flexibility(team_id, league_id, season)
+        
+        # Combine into comprehensive analysis
+        tactical_style = {
+            'formations': formation_analysis,
+            'style_scores': style_scores,
+            'flexibility': flexibility,
+            'analysis_type': 'tactical_style',
+            'phase4_enabled': True,
+            'tactical_intelligence': True
+        }
+        
+        return tactical_style
+        
+    except Exception as e:
+        return {
+            'analysis_type': 'tactical_style',
+            'phase4_enabled': True,
+            'tactical_intelligence': False,
+            'error': str(e)
+        }
+
 
 def analyze_team_formation_preferences(team_id: int, league_id: int, season: int) -> Dict:
     """

@@ -24,8 +24,27 @@ import logging
 import time
 
 from ..infrastructure.version_manager import VersionManager
-from ..data.api_client import APIClient
-from ..data.database_client import DatabaseClient
+from ..data.api_client import get_fixtures_goals, get_team_statistics
+from ..data.database_client import get_team_params_from_db, get_league_params_from_db
+
+# Compatibility wrappers for missing classes
+class APIClient:
+    @staticmethod
+    def get_fixtures(*args, **kwargs):
+        return get_fixtures_goals(*args, **kwargs)
+    
+    @staticmethod
+    def get_team_statistics(*args, **kwargs):
+        return get_team_statistics(*args, **kwargs)
+
+class DatabaseClient:
+    @staticmethod
+    def get_team_params(team_id):
+        return get_team_params_from_db(team_id)
+    
+    @staticmethod
+    def get_league_params(league_id):
+        return get_league_params_from_db(league_id)
 
 logger = logging.getLogger(__name__)
 

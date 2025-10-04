@@ -1,0 +1,78 @@
+{
+  "overall_status": "FAIL",
+  "phase_results": {
+    "phase_0": {
+      "status": "PASS",
+      "current_version": "2.0",
+      "version_features": [
+        "contamination_prevention",
+        "hierarchical_fallback"
+      ],
+      "multiplier_calculation": "functional",
+      "multiplier_keys": [
+        "home_multiplier",
+        "away_multiplier",
+        "total_multiplier",
+        "confidence",
+        "sample_size",
+        "architecture_version",
+        "calculation_timestamp",
+        "default_reason",
+        "contamination_prevented",
+        "strategy",
+        "team_id",
+        "league_id",
+        "season"
+      ]
+    },
+    "phase_1": {
+      "status": "FAIL",
+      "error": "get_opponent_tier_from_match() missing 1 required positional argument: 'perspective_team_id'"
+    },
+    "phase_2": {
+      "status": "FAIL",
+      "error": "cannot import name 'dynamodb' from 'src.data.database_client' (/home/ubuntu/Projects/football-fixture-predictions/src/data/database_client.py)"
+    },
+    "phase_3": {
+      "status": "FAIL",
+      "error": "cannot import name 'dynamodb' from 'src.data.database_client' (/home/ubuntu/Projects/football-fixture-predictions/src/data/database_client.py)"
+    },
+    "phase_4": {
+      "status": "FAIL",
+      "error": "get_formation_attacking_bonus() got an unexpected keyword argument 'team_id'"
+    },
+    "phase_5": {
+      "status": "FAIL",
+      "error": "cannot import name 'dynamodb' from 'src.data.database_client' (/home/ubuntu/Projects/football-fixture-predictions/src/data/database_client.py)"
+    },
+    "phase_6": {
+      "status": "FAIL",
+      "error": "calibrate_prediction_confidence() got an unexpected keyword argument 'prediction'"
+    }
+  },
+  "integration_results": {
+    "pipeline": {
+      "status": "FAIL",
+      "error": "cannot import name 'dynamodb' from 'src.data.database_client' (/home/ubuntu/Projects/football-fixture-predictions/src/data/database_client.py)"
+    }
+  },
+  "performance_metrics": {
+    "status": "FAIL",
+    "error": "cannot import name 'dynamodb' from 'src.data.database_client' (/home/ubuntu/Projects/football-fixture-predictions/src/data/database_client.py)"
+  },
+  "production_readiness": {
+    "status": "FAIL",
+    "readiness_checks": {
+      "module_imports": "FAIL: cannot import name 'dynamodb' from 'src.data.database_client' (/home/ubuntu/Projects/football-fixture-predictions/src/data/database_client.py)",
+      "error_handling": "PASS",
+      "version_consistency": "FAIL: Version 2.0 not 6.x",
+      "system_monitoring": "PASS"
+    },
+    "passed_checks": 2,
+    "total_checks": 4,
+    "pass_rate": 0.5,
+    "deployment_ready": false
+  },
+  "test_timestamp": "2025-10-04T04:31:10.174515",
+  "system_version": "6.0"
+}

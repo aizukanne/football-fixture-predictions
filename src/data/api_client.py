@@ -456,3 +456,43 @@ def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIE
             }
     
     return None
+
+
+class APIClient:
+    """
+    Wrapper class for API client functions to maintain compatibility
+    with feature modules that expect a class interface.
+    """
+    
+    def __init__(self):
+        pass
+    
+    def get_league_start_date(self, league_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_league_start_date(league_id, max_retries)
+    
+    def get_team_statistics(self, league_id, season, team_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_team_statistics(league_id, season, team_id, max_retries)
+    
+    def get_venue_id(self, team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
+        return get_venue_id(team_id, league_id, season, max_retries)
+    
+    def get_league_teams(self, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
+        return get_league_teams(league_id, season, max_retries)
+    
+    def get_last_five_games(self, team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
+        return get_last_five_games(team_id, league_id, season, max_retries)
+    
+    def get_head_to_head(self, home_team_id, away_team_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_head_to_head(home_team_id, away_team_id, max_retries)
+    
+    def get_injured_players(self, fixture_id, date, max_retries=DEFAULT_MAX_RETRIES):
+        return get_injured_players(fixture_id, date, max_retries)
+    
+    def fetch_team_match_data(self, league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES):
+        return fetch_team_match_data(league_id, season, team_id, from_date, max_retries)
+    
+    def get_fixtures_goals(self, league_id, start_timestamp, end_timestamp, max_retries=DEFAULT_MAX_RETRIES):
+        return get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries)
+    
+    def get_next_fixture(self, team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_next_fixture(team_id, current_fixture_id, max_retries)
