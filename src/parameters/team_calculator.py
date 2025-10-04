@@ -31,6 +31,10 @@ from ..utils.geographic import calculate_combined_travel_impact
 from ..features.form_analyzer import calculate_recent_form, analyze_seasonal_patterns, calculate_momentum_factor
 from ..features.injury_analyzer import calculate_injury_impact
 from ..features.temporal_weighting import apply_temporal_weightings, calculate_fixture_congestion_impact
+# Phase 4 tactical analysis imports
+from ..features.tactical_analyzer import TacticalAnalyzer, calculate_tactical_style_scores, analyze_team_formation_preferences
+from ..features.formation_analyzer import FormationAnalyzer
+from ..data.tactical_data_collector import TacticalDataCollector
 
 
 def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
@@ -280,7 +284,21 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     else:
         temporal_params = get_neutral_temporal_params()
     
-    # Return enhanced structure with overall, segmented, venue, and temporal parameters
+    # Phase 4 Enhancement: Calculate tactical parameters
+    tactical_params = {}
+    if season and not df.empty and len(df) >= MINIMUM_GAMES_THRESHOLD:
+        try:
+            tactical_params = calculate_tactical_parameters(
+                team_id, league_id, season, prediction_date or datetime.now()
+            )
+        except Exception as e:
+            print(f"Warning: Failed to calculate tactical parameters for team {team_id}: {e}")
+            print("Using neutral tactical parameters")
+            tactical_params = get_neutral_tactical_params()
+    else:
+        tactical_params = get_neutral_tactical_params()
+    
+    # Return enhanced structure with overall, segmented, venue, temporal, and tactical parameters
     return {
         # Maintain backward compatibility by keeping overall parameters at root level
         **overall_params,
@@ -294,13 +312,18 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
         # Phase 3 enhancement: temporal parameters
         'temporal_params': temporal_params,
         
+        # Phase 4 enhancement: tactical parameters
+        'tactical_params': tactical_params,
+        
         # Metadata about enhancements
         'segmentation_enabled': bool(season and not df.empty),
         'segmentation_version': '1.0',
         'venue_analysis_enabled': bool(season and not df.empty),
         'venue_analysis_version': '2.0',
         'temporal_analysis_enabled': bool(season and not df.empty),
-        'temporal_analysis_version': '3.0'
+        'temporal_analysis_version': '3.0',
+        'tactical_analysis_enabled': bool(season and not df.empty),
+        'tactical_analysis_version': '4.0'
     }
 
 

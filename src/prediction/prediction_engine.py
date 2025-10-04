@@ -26,7 +26,10 @@ from ..features.surface_analyzer import SurfaceAnalyzer, compare_teams_surface_m
 from ..utils.geographic import calculate_combined_travel_impact
 # Phase 3 temporal analysis imports
 from ..features.form_analyzer import analyze_head_to_head_form
-from ..parameters.team_calculator import get_temporal_multiplier_for_prediction
+from ..parameters.team_calculator import get_temporal_multiplier_for_prediction, get_tactical_multiplier_for_prediction
+# Phase 4 tactical analysis imports
+from ..features.tactical_matchups import TacticalMatchupAnalyzer, analyze_tactical_compatibility
+from ..features.formation_analyzer import FormationAnalyzer, get_formation_attacking_bonus
 
 
 def get_segmented_params(team_params, opponent_team_id, league_id, season):
@@ -456,6 +459,71 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
         else:
             print("Phase 3 temporal analysis not available (missing required parameters)")
             temporal_factors = {'temporal_analysis_applied': False}
+        
+        # Phase 4 Enhancement: Apply tactical matchup analysis for sophisticated prediction intelligence
+        tactical_factors = {}
+        if season and home_team_id and away_team_id:
+            try:
+                # Analyze tactical compatibility and matchup dynamics
+                matchup_analyzer = TacticalMatchupAnalyzer()
+                tactical_analysis = matchup_analyzer.analyze_tactical_compatibility(
+                    home_team_id, away_team_id, league_id, season
+                )
+                
+                # Extract tactical multipliers
+                tactical_multipliers = tactical_analysis.get('tactical_multipliers', {})
+                home_tactical_mult = float(tactical_multipliers.get('home_tactical_multiplier', 1.0))
+                away_tactical_mult = float(tactical_multipliers.get('away_tactical_multiplier', 1.0))
+                
+                # Apply tactical adjustments to lambdas
+                home_lambda_base *= home_tactical_mult
+                away_lambda_base *= away_tactical_mult
+                
+                # Formation-specific bonuses
+                home_tactical_params = effective_home_params.get('tactical_params', {})
+                away_tactical_params = effective_away_params.get('tactical_params', {})
+                
+                if home_tactical_params and away_tactical_params:
+                    formation_analyzer = FormationAnalyzer()
+                    
+                    home_formation = home_tactical_params.get('formation_preferences', {}).get('primary_formation', '4-4-2')
+                    away_formation = away_tactical_params.get('formation_preferences', {}).get('primary_formation', '4-4-2')
+                    
+                    # Apply formation attacking bonuses
+                    home_formation_bonus = formation_analyzer.get_formation_attacking_bonus(home_formation, away_formation)
+                    away_formation_bonus = formation_analyzer.get_formation_attacking_bonus(away_formation, home_formation)
+                    
+                    home_lambda_base *= float(home_formation_bonus)
+                    away_lambda_base *= float(away_formation_bonus)
+                else:
+                    home_formation_bonus = Decimal('1.0')
+                    away_formation_bonus = Decimal('1.0')
+                
+                tactical_factors = {
+                    'tactical_analysis_applied': True,
+                    'tactical_advantage': tactical_analysis.get('overall_tactical_advantage', 'balanced'),
+                    'home_tactical_multiplier': home_tactical_mult,
+                    'away_tactical_multiplier': away_tactical_mult,
+                    'home_formation': home_tactical_params.get('formation_preferences', {}).get('primary_formation', '4-4-2'),
+                    'away_formation': away_tactical_params.get('formation_preferences', {}).get('primary_formation', '4-4-2'),
+                    'formation_bonuses': {
+                        'home_formation_bonus': float(home_formation_bonus),
+                        'away_formation_bonus': float(away_formation_bonus)
+                    },
+                    'key_battles': tactical_analysis.get('tactical_adjustments', {}).get('key_battles', []),
+                    'tactical_confidence': tactical_analysis.get('analysis_confidence', 0.5)
+                }
+                
+                print(f"Phase 4 tactical analysis applied: {tactical_analysis.get('overall_tactical_advantage', 'balanced')} advantage")
+                print(f"Tactical multipliers - Home: {home_tactical_mult:.3f}, Away: {away_tactical_mult:.3f}")
+                print(f"Formation matchup: {tactical_factors['home_formation']} vs {tactical_factors['away_formation']}")
+                
+            except Exception as e:
+                print(f"Warning: Tactical analysis failed, using base parameters: {e}")
+                tactical_factors = {'tactical_analysis_applied': False}
+        else:
+            print("Phase 4 tactical analysis not available (missing required parameters)")
+            tactical_factors = {'tactical_analysis_applied': False}
         
         # Phase 0: Use transition manager to get effective multipliers with contamination prevention
         # Note: Use original params for multiplier calculation to maintain compatibility
