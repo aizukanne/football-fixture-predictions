@@ -26,6 +26,7 @@ import time
 from ..infrastructure.version_manager import VersionManager
 from ..data.api_client import get_fixtures_goals, get_team_statistics
 from ..data.database_client import get_team_params_from_db, get_league_params_from_db
+from ..utils.constants import _get_table_name
 
 # Compatibility wrappers for missing classes
 class APIClient:
@@ -57,7 +58,7 @@ class TacticalDataCollector:
         self.version_manager = VersionManager()
         
         # DynamoDB table for tactical cache
-        self.tactical_cache_table = 'tactical_analysis_cache'
+        self.tactical_cache_table = _get_table_name('tactical_analysis_cache')
         
         # Cache TTL (48 hours for tactical analysis)
         self.cache_ttl = 48 * 60 * 60  # 48 hours in seconds

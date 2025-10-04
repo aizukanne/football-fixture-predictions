@@ -70,6 +70,7 @@ This project includes comprehensive documentation covering all aspects from quic
 
 1. **[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)** - Production deployment
    - AWS Lambda deployment (recommended)
+   - Environment-based table isolation
    - Docker deployment
    - Kubernetes deployment
    - Home network (LXD + MongoDB)
@@ -78,6 +79,17 @@ This project includes comprehensive documentation covering all aspects from quic
    - Monitoring & logging
    - Security best practices
    - Performance tuning
+   - Troubleshooting
+
+2. **[docs/ENVIRONMENT_CONFIGURATION.md](docs/ENVIRONMENT_CONFIGURATION.md)** - Multi-environment setup
+   - Environment-based table naming
+   - Multi-environment deployments (dev/staging/prod)
+   - Multi-tenant architecture
+   - CI/CD pipeline integration
+   - Developer sandboxes
+   - IAM permissions configuration
+   - Verification and testing
+   - Migration guide
    - Troubleshooting
 
 ---
@@ -127,6 +139,14 @@ This project includes comprehensive documentation covering all aspects from quic
    - Career analysis
    - Usage examples
    - Implementation details
+
+3. **[TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md](TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)**
+   - Environment-based table isolation
+   - Implementation summary
+   - Testing results
+   - Usage examples
+   - AWS deployment configuration
+   - Multi-environment support
 
 ---
 

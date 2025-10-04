@@ -19,6 +19,12 @@ import time
 from datetime import datetime
 from botocore.exceptions import ClientError
 import logging
+import sys
+import os
+
+# Add src to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from src.utils.constants import _get_table_name
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,8 +49,8 @@ def create_league_standings_cache_table():
         logger.error(f"Failed to initialize DynamoDB client: {e}")
         return False
     
-    table_name = 'league_standings_cache'
-    
+    table_name = _get_table_name('league_standings_cache')
+
     # Check if table already exists
     try:
         existing_table = dynamodb.Table(table_name)
@@ -140,7 +146,7 @@ def verify_table_setup():
     try:
         dynamodb = boto3.resource('dynamodb')
         client = boto3.client('dynamodb')
-        table_name = 'league_standings_cache'
+        table_name = _get_table_name('league_standings_cache')
         
         # Check table exists and is active
         table = dynamodb.Table(table_name)
@@ -191,7 +197,7 @@ def test_cache_operations():
     """
     try:
         dynamodb = boto3.resource('dynamodb')
-        table = dynamodb.Table('league_standings_cache')
+        table = dynamodb.Table(_get_table_name('league_standings_cache'))
         
         # Test data
         test_cache_key = 'test-league-2024'

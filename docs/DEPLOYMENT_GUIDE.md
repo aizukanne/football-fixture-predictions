@@ -9,13 +9,14 @@ Version: 6.0 | Last Updated: October 4, 2025
 
 1. [Deployment Overview](#deployment-overview)
 2. [AWS Lambda Deployment](#aws-lambda-deployment)
-3. [Alternative Deployments](#alternative-deployments)
-4. [Environment Configuration](#environment-configuration)
-5. [Database Setup](#database-setup)
-6. [Monitoring & Logging](#monitoring--logging)
-7. [Security](#security)
-8. [Performance Tuning](#performance-tuning)
-9. [Troubleshooting](#troubleshooting)
+3. [Environment-Based Table Isolation](#environment-based-table-isolation)
+4. [Alternative Deployments](#alternative-deployments)
+5. [Environment Configuration](#environment-configuration)
+6. [Database Setup](#database-setup)
+7. [Monitoring & Logging](#monitoring--logging)
+8. [Security](#security)
+9. [Performance Tuning](#performance-tuning)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -86,11 +87,14 @@ aws lambda create-function \
     --memory-size 512 \
     --environment Variables="{
         RAPIDAPI_KEY=your_key,
-        GAME_FIXTURES_TABLE=game_fixtures,
-        TEAM_PARAMETERS_TABLE=team_parameters,
-        LEAGUE_PARAMETERS_TABLE=league_parameters
+        TABLE_PREFIX=myapp_,
+        TABLE_SUFFIX=_prod,
+        ENVIRONMENT=prod
     }"
 ```
+
+> **Note**: With environment-based table naming, you no longer need to specify individual table names. The system automatically generates them based on `TABLE_PREFIX`, `TABLE_SUFFIX`, and `ENVIRONMENT`. See [Environment-Based Table Isolation](#environment-based-table-isolation) for details.
+
 
 **Option B: Using AWS Console**
 
@@ -240,6 +244,193 @@ aws cloudwatch put-metric-alarm \
     --comparison-operator GreaterThanThreshold \
     --alarm-actions arn:aws:sns:REGION:ACCOUNT_ID:alerts
 ```
+
+---
+
+## Environment-Based Table Isolation
+
+### Overview
+
+The system supports environment-based table naming, allowing multiple independent deployments in the same AWS account. This is essential for:
+
+- **Multi-environment deployments** (dev, staging, prod)
+- **Multi-tenant applications** (isolated data per customer)
+- **CI/CD pipelines** (temporary test environments)
+- **Developer sandboxes** (personal development environments)
+
+### Quick Start
+
+**1. Deploy tables with environment-specific names:**
+
+```bash
+# Set environment variables
+export TABLE_PREFIX="myapp_"
+export TABLE_SUFFIX="_prod"
+export ENVIRONMENT="prod"
+
+# Deploy all DynamoDB tables
+python3 -m src.infrastructure.deploy_tables
+```
+
+**2. Configure Lambda function:**
+
+```bash
+aws lambda update-function-configuration \
+  --function-name football-predictions \
+  --environment Variables="{
+    RAPIDAPI_KEY=your_key,
+    TABLE_PREFIX=myapp_,
+    TABLE_SUFFIX=_prod,
+    ENVIRONMENT=prod
+  }"
+```
+
+### Table Naming Convention
+
+Tables are named using the pattern: `{TABLE_PREFIX}{base_name}{TABLE_SUFFIX}`
+
+**Examples:**
+
+| Configuration | Result |
+|---------------|--------|
+| No prefix/suffix | `game_fixtures` |
+| Prefix: `myapp_` | `myapp_game_fixtures` |
+| Suffix: `_prod` | `game_fixtures_prod` |
+| Both: `myapp_` + `_prod` | `myapp_game_fixtures_prod` |
+
+### Deployment Scenarios
+
+**Development:**
+```bash
+# Single developer
+python3 -m src.infrastructure.deploy_tables
+
+# Multiple developers (isolated sandboxes)
+export TABLE_PREFIX="dev_john_"
+python3 -m src.infrastructure.deploy_tables
+```
+
+**Staging:**
+```bash
+export TABLE_PREFIX="myapp_"
+export TABLE_SUFFIX="_staging"
+export ENVIRONMENT="staging"
+python3 -m src.infrastructure.deploy_tables --no-interactive
+```
+
+**Production:**
+```bash
+export TABLE_PREFIX="myapp_"
+export TABLE_SUFFIX="_prod"
+export ENVIRONMENT="prod"
+python3 -m src.infrastructure.deploy_tables --no-interactive
+```
+
+**Multi-Tenant:**
+```bash
+# Customer 1
+export TABLE_PREFIX="customer1_"
+export TABLE_SUFFIX="_prod"
+python3 -m src.infrastructure.deploy_tables --no-interactive
+
+# Customer 2
+export TABLE_PREFIX="customer2_"
+export TABLE_SUFFIX="_prod"
+python3 -m src.infrastructure.deploy_tables --no-interactive
+```
+
+### Deployment Script Features
+
+**Interactive mode (default):**
+```bash
+python3 -m src.infrastructure.deploy_tables
+# Prompts for environment configuration
+```
+
+**Automated mode:**
+```bash
+TABLE_PREFIX=myapp_ TABLE_SUFFIX=_prod python3 -m src.infrastructure.deploy_tables --no-interactive
+```
+
+**Dry-run mode (test configuration):**
+```bash
+python3 -m src.infrastructure.deploy_tables --dry-run
+```
+
+**Verify existing tables:**
+```bash
+python3 -m src.infrastructure.deploy_tables --verify-only
+```
+
+### IAM Permissions
+
+Update IAM role to allow access to environment-specific tables:
+
+**Option 1: Wildcard (Flexible)**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "dynamodb:PutItem",
+    "dynamodb:GetItem",
+    "dynamodb:UpdateItem",
+    "dynamodb:Query",
+    "dynamodb:Scan"
+  ],
+  "Resource": [
+    "arn:aws:dynamodb:*:*:table/*game_fixtures*",
+    "arn:aws:dynamodb:*:*:table/*league_parameters*",
+    "arn:aws:dynamodb:*:*:table/*team_parameters*",
+    "arn:aws:dynamodb:*:*:table/*venue_cache*",
+    "arn:aws:dynamodb:*:*:table/*tactical_cache*",
+    "arn:aws:dynamodb:*:*:table/*league_standings_cache*"
+  ]
+}
+```
+
+**Option 2: Explicit (Most Secure)**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "dynamodb:PutItem",
+    "dynamodb:GetItem",
+    "dynamodb:UpdateItem",
+    "dynamodb:Query",
+    "dynamodb:Scan"
+  ],
+  "Resource": [
+    "arn:aws:dynamodb:eu-west-2:123456789012:table/myapp_game_fixtures_prod",
+    "arn:aws:dynamodb:eu-west-2:123456789012:table/myapp_league_parameters_prod",
+    "arn:aws:dynamodb:eu-west-2:123456789012:table/myapp_team_parameters_prod",
+    "arn:aws:dynamodb:eu-west-2:123456789012:table/myapp_venue_cache_prod",
+    "arn:aws:dynamodb:eu-west-2:123456789012:table/myapp_tactical_cache_prod",
+    "arn:aws:dynamodb:eu-west-2:123456789012:table/myapp_league_standings_cache_prod"
+  ]
+}
+```
+
+### Verification
+
+**Check table configuration:**
+```python
+from src.utils.constants import get_table_config
+
+config = get_table_config()
+print(f"Environment: {config['environment']}")
+print(f"Tables: {config['tables']}")
+```
+
+**List deployed tables:**
+```bash
+aws dynamodb list-tables --query "TableNames[?contains(@, 'myapp_')]"
+```
+
+### Complete Documentation
+
+For complete details on environment configuration, multi-tenant setup, migration, and troubleshooting, see:
+
+**[Environment Configuration Guide](ENVIRONMENT_CONFIGURATION.md)**
 
 ---
 

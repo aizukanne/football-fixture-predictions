@@ -208,9 +208,11 @@ System Version: 6.0
 | **API Documentation** | Complete API reference | `/docs/API_DOCUMENTATION.md` |
 | **Deployment Guide** | AWS & production deployment | `/docs/DEPLOYMENT_GUIDE.md` |
 | **Developer Guide** | Development setup & guidelines | `/docs/DEVELOPER_GUIDE.md` |
+| **Environment Config** | Multi-environment setup | `/docs/ENVIRONMENT_CONFIGURATION.md` |
 | **System Test Report** | Comprehensive test results | `/COMPREHENSIVE_SYSTEM_TEST_REPORT.md` |
 | **Data Sources** | API-Football data sources | `/DATA_SOURCES_DOCUMENTATION.md` |
 | **Manager Analysis** | Coach analysis implementation | `/MANAGER_ANALYSIS_COMPLETION_REPORT.md` |
+| **Table Isolation** | Environment-based tables | `/TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md` |
 
 ---
 
@@ -280,9 +282,11 @@ print(f"Prediction Confidence: {confidence:.1%}")
 | 5.0 | 2024 | Phase 4: Tactical intelligence |
 | 6.0 | 2025 | Phase 5 & 6: Adaptive strategy + confidence calibration |
 | 6.0.1 | Oct 2025 | Complete manager analysis implementation ✨ |
+| 6.0.2 | Oct 2025 | Environment-based table isolation for AWS ✨ |
 
 ### Recent Milestones
 
+- ✅ **Oct 4, 2025** - Table isolation implementation (multi-environment support)
 - ✅ **Oct 4, 2025** - Manager analysis implementation complete
 - ✅ **Oct 4, 2025** - System integration fixes (100% pass rate)
 - ✅ **Oct 4, 2025** - Complete documentation suite

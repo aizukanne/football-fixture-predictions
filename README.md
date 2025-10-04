@@ -83,6 +83,14 @@ export AWS_ACCESS_KEY_ID="your_aws_access_key"
 export AWS_SECRET_ACCESS_KEY="your_aws_secret_key"
 export AWS_DEFAULT_REGION="eu-west-2"
 
+# Optional: Configure environment-based table naming (for multi-environment deployments)
+export TABLE_PREFIX="myapp_"        # Optional: prefix for table names
+export TABLE_SUFFIX="_dev"          # Optional: suffix for table names
+export ENVIRONMENT="dev"            # Environment identifier (dev/staging/prod)
+
+# Deploy DynamoDB tables
+python3 -m src.infrastructure.deploy_tables
+
 # Verify installation
 python3 -c "from src.prediction.prediction_engine import generate_prediction_with_reporting; print('✅ Installation successful!')"
 ```
@@ -207,6 +215,7 @@ football-fixture-predictions/
 - **[API Documentation](docs/API_DOCUMENTATION.md)** - Complete API reference
 - **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - AWS & production deployment
 - **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - Development setup & guidelines
+- **[Environment Configuration](docs/ENVIRONMENT_CONFIGURATION.md)** - Multi-environment & multi-tenant setup
 
 ### Technical Reports
 
@@ -214,6 +223,7 @@ football-fixture-predictions/
 - **[Data Sources](DATA_SOURCES_DOCUMENTATION.md)** - API-Football data sources
 - **[Manager Analysis](MANAGER_ANALYSIS_COMPLETION_REPORT.md)** - Coach analysis implementation
 - **[Integration Fixes](SYSTEM_INTEGRATION_FIXES_SUMMARY.md)** - Recent improvements
+- **[Table Isolation](TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)** - Environment-based table naming
 
 ### Architecture Documentation
 

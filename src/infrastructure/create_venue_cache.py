@@ -18,6 +18,7 @@ import json
 from typing import Dict, Optional
 
 from ..data.database_client import dynamodb
+from ..utils.constants import _get_table_name
 
 
 def create_venue_cache_table() -> bool:
@@ -40,9 +41,9 @@ def create_venue_cache_table() -> bool:
     """
     try:
         dynamodb_client = dynamodb.meta.client
-        
+
         # Define table schema
-        table_name = 'venue_cache'
+        table_name = _get_table_name('venue_cache')
         
         # Check if table already exists
         try:
@@ -157,13 +158,13 @@ def create_venue_cache_table() -> bool:
 def delete_venue_cache_table() -> bool:
     """
     Delete the venue_cache table (for cleanup/testing).
-    
+
     Returns:
         True if table deleted successfully, False otherwise
     """
     try:
         dynamodb_client = dynamodb.meta.client
-        table_name = 'venue_cache'
+        table_name = _get_table_name('venue_cache')
         
         # Delete table
         dynamodb_client.delete_table(TableName=table_name)
@@ -190,13 +191,13 @@ def delete_venue_cache_table() -> bool:
 def describe_venue_cache_table() -> Optional[Dict]:
     """
     Get detailed information about the venue_cache table.
-    
+
     Returns:
         Table description dict or None if table doesn't exist
     """
     try:
         dynamodb_client = dynamodb.meta.client
-        table_name = 'venue_cache'
+        table_name = _get_table_name('venue_cache')
         
         response = dynamodb_client.describe_table(TableName=table_name)
         table_info = response['TableDescription']
@@ -241,9 +242,9 @@ def test_venue_cache_operations() -> bool:
     """
     try:
         from datetime import datetime, timedelta
-        
+
         try:
-            table = dynamodb.Table('venue_cache')
+            table = dynamodb.Table(_get_table_name('venue_cache'))
         except Exception as e:
             print(f"Could not initialize venue_cache table: {e}")
             return False
