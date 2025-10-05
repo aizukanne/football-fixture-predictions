@@ -1,664 +1,311 @@
-# ⚽ Football Fixture Prediction System
+# Football Fixture Prediction System v6.0
 
-**Advanced AI-Powered Football Match Prediction Engine with 6-Phase Tactical Intelligence Architecture**
+**Advanced Football Match Outcome Prediction System**
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
-[![Architecture](https://img.shields.io/badge/Architecture-v6.0-green.svg)](docs/ARCHITECTURE.md)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-success.svg)](COMPREHENSIVE_SYSTEM_TEST_REPORT.md)
-
-A sophisticated, production-ready football prediction system that leverages advanced statistical modeling, tactical intelligence, and machine learning to generate highly accurate match outcome predictions.
+[![Deployment Status](https://img.shields.io/badge/Deployment-Complete-success)](docs/deployment/DEPLOYMENT_COMPLETE_SUMMARY.md)
+[![AWS Region](https://img.shields.io/badge/AWS-eu--west--2-orange)](https://aws.amazon.com/about-aws/global-infrastructure/regions_az/)
+[![Python](https://img.shields.io/badge/Python-3.13-blue)](https://www.python.org/)
+[![System Status](https://img.shields.io/badge/Status-Operational-brightgreen)](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md)
 
 ---
 
-## 🎯 Overview
+## 🎯 System Overview
 
-This system provides **enterprise-grade football match predictions** by analyzing:
-- Historical match data and team performance
-- Opponent-specific tactical adaptations
-- Venue advantages and travel impact
-- Temporal form patterns and momentum
-- Formation matchups and tactical styles
-- Manager influence and coaching patterns
-- Calibrated confidence metrics
+A sophisticated machine learning system for predicting football match outcomes using a 6-phase advanced prediction model deployed on AWS Lambda.
 
 ### Key Features
 
-✅ **6-Phase Intelligence Architecture**
-- Phase 0: Version tracking & contamination prevention
-- Phase 1: Opponent strength stratification
-- Phase 2: Venue analysis & travel impact
-- Phase 3: Temporal evolution & form tracking
-- Phase 4: Tactical intelligence & formations
-- Phase 5: Adaptive strategy & team classification
-- Phase 6: Confidence calibration & reporting
+- **6-Phase Prediction Model:**
+  1. Core Statistical Engine (Poisson distribution)
+  2. Opponent Stratification (Smart vs Dumb teams)
+  3. Home/Away Venue Analysis
+  4. Temporal Evolution Tracking
+  5. Tactical Intelligence (formations, managers)
+  6. Adaptive Strategy Selection & Confidence Calibration
 
-✅ **Production-Ready**
-- 94% test pass rate across all phases
-- Grade A performance (< 0.01s avg prediction time)
-- Graceful error handling and fallbacks
-- Comprehensive monitoring and logging
+- **AWS Serverless Architecture:**
+  - 5 Lambda Functions (Python 3.13)
+  - 6 DynamoDB Tables
+  - 10 SQS Queues (with DLQs)
+  - Event-driven workflow
 
-✅ **Data-Driven**
-- Real-time data from API-Football
-- DynamoDB caching for performance
-- Bayesian statistical modeling
-- Advanced tactical analysis
-
----
-
-## 📊 System Performance
-
-| Metric | Value | Grade |
-|--------|-------|-------|
-| **Test Pass Rate** | 94% | ✅ A |
-| **Avg Prediction Time** | < 0.01s | ✅ A |
-| **System Integration** | 100% | ✅ A |
-| **Production Readiness** | 100% | ✅ A |
-| **Phase Coverage** | 7/7 Phases | ✅ Complete |
+- **Production-Ready:**
+  - Multi-environment support
+  - Comprehensive error handling
+  - CloudWatch monitoring
+  - Automated parameter updates
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Using the Deployed System
 
-- Python 3.8+
-- AWS Account (for DynamoDB)
-- RapidAPI Key (for API-Football access)
-
-### Installation
-
+**Step 1: Initialize League Parameters**
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/football-fixture-predictions.git
-cd football-fixture-predictions
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-export RAPIDAPI_KEY="your_rapidapi_key_here"
-export AWS_ACCESS_KEY_ID="your_aws_access_key"
-export AWS_SECRET_ACCESS_KEY="your_aws_secret_key"
-export AWS_DEFAULT_REGION="eu-west-2"
-
-# Optional: Configure environment-based table naming (for multi-environment deployments)
-export TABLE_PREFIX="myapp_"        # Optional: prefix for table names
-export TABLE_SUFFIX="_dev"          # Optional: suffix for table names
-export ENVIRONMENT="dev"            # Environment identifier (dev/staging/prod)
-
-# Deploy DynamoDB tables
-python3 -m src.infrastructure.deploy_tables
-
-# Verify installation
-python3 -c "from src.prediction.prediction_engine import generate_prediction_with_reporting; print('✅ Installation successful!')"
+aws lambda invoke \
+    --function-name football-league-parameter-handler-prod \
+    --payload '{"league_id": 39, "season": 2024}' \
+    --region eu-west-2 \
+    response.json
 ```
 
-### Basic Usage
-
-```python
-from src.prediction.prediction_engine import generate_prediction_with_reporting
-
-# Generate a prediction
-prediction = generate_prediction_with_reporting(
-    home_team_id=33,      # Manchester United
-    away_team_id=34,      # Newcastle United
-    league_id=39,         # Premier League
-    season=2024,
-    venue_id=556,         # Old Trafford
-    include_insights=True
-)
-
-# Access prediction results
-print(f"Home Win Probability: {prediction['predictions']['home_team']['score_probability']}")
-print(f"Most Likely Score: {prediction['predictions']['home_team']['most_likely_goals']}-{prediction['predictions']['away_team']['most_likely_goals']}")
-print(f"Prediction Confidence: {prediction['metadata']['final_confidence']}")
+**Step 2: Initialize Team Parameters**
+```bash
+aws sqs send-message \
+    --queue-url https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-team-parameter-updates_prod \
+    --message-body '{"action": "update_league_teams", "league_id": 39, "season": 2024}' \
+    --region eu-west-2
 ```
+
+**Step 3: Ingest Fixtures & Generate Predictions**
+```bash
+aws lambda invoke \
+    --function-name football-fixture-ingestion-prod \
+    --payload '{"action": "fetch_today"}' \
+    --region eu-west-2 \
+    response.json
+```
+
+📖 **For complete instructions:** [Operational Workflow Guide](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md)
 
 ---
 
-## 🏗️ Architecture
+## 📚 Documentation
 
-### System Overview
+### Quick Links
+
+**Getting Started:**
+- [Operational Workflow Guide](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md) ⭐ **START HERE**
+- [Quick Start Deployment](docs/guides/QUICK_START_DEPLOYMENT.md)
+- [API Documentation](docs/guides/API_DOCUMENTATION.md)
+
+**Deployment:**
+- [Deployment Complete Summary](docs/deployment/DEPLOYMENT_COMPLETE_SUMMARY.md)
+- [Deployment Guide](docs/deployment/DEPLOYMENT_GUIDE.md)
+- [Environment Configuration](docs/deployment/ENVIRONMENT_CONFIGURATION.md)
+
+**Architecture:**
+- [Event-Driven System Architecture](docs/architecture/EVENT_DRIVEN_PREDICTION_SYSTEM_ARCHITECTURE.md)
+- [Implementation Guide](docs/architecture/Implementation%20Guide/)
+- [Table Isolation Guide](docs/architecture/TABLE_ISOLATION_IMPLEMENTATION_GUIDE.md)
+
+**📂 Browse all documentation:** [docs/README.md](docs/README.md)
+
+---
+
+## 🏗️ System Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                   PREDICTION ENGINE                          │
-│                  (prediction_engine.py)                      │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                  6-PHASE ARCHITECTURE                        │
+│                  AWS Production Environment                  │
+│                      eu-west-2 Region                        │
 ├──────────────────────────────────────────────────────────────┤
-│  Phase 0: Version Tracking & Contamination Prevention        │
-│  Phase 1: Opponent Strength Stratification                  │
-│  Phase 2: Venue Analysis & Travel Impact                    │
-│  Phase 3: Temporal Evolution & Form Tracking                │
-│  Phase 4: Tactical Intelligence & Formations                │
-│  Phase 5: Adaptive Strategy & Team Classification           │
-│  Phase 6: Confidence Calibration & Reporting                │
+│                                                              │
+│  Lambda Functions (Python 3.13 + scipy-layer)               │
+│  ├─ API Service              (Query predictions)            │
+│  ├─ Fixture Ingestion        (Daily retrieval)              │
+│  ├─ Prediction Handler       (Generate predictions)         │
+│  ├─ League Parameter Handler (Weekly updates)               │
+│  └─ Team Parameter Handler   (Weekly updates)               │
+│                                                              │
+│  DynamoDB Tables (6)                                         │
+│  ├─ game_fixtures_prod       (Predictions)                  │
+│  ├─ league_parameters_prod   (League stats)                 │
+│  ├─ team_parameters_prod     (Team stats)                   │
+│  └─ [3 cache tables with TTL]                               │
+│                                                              │
+│  SQS Queues (5 main + 5 DLQs)                               │
+│  ├─ fixture-predictions      (Prediction requests)          │
+│  ├─ league-parameter-updates (League computations)          │
+│  ├─ team-parameter-updates   (Team computations)            │
+│  └─ [2 additional queues]                                   │
+│                                                              │
 └──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                    DATA LAYER                                │
-├──────────────────────────────────────────────────────────────┤
-│  API-Football (RapidAPI)  │  DynamoDB Cache                  │
-│  • Match Data             │  • Venue Cache                   │
-│  • Team Statistics        │  • Tactical Data                 │
-│  • Coach Information      │  • League Standings              │
-│  • Formations & Lineups   │  • Team Parameters               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### Project Structure
-
-```
-football-fixture-predictions/
-├── src/
-│   ├── analytics/              # Performance tracking & confidence calibration
-│   │   ├── accuracy_tracker.py
-│   │   ├── confidence_calibrator.py
-│   │   └── performance_dashboard.py
-│   ├── data/                   # Data access layer
-│   │   ├── api_client.py       # API-Football integration
-│   │   ├── database_client.py  # DynamoDB operations
-│   │   └── tactical_data_collector.py
-│   ├── features/               # Feature extraction & analysis
-│   │   ├── opponent_classifier.py
-│   │   ├── venue_analyzer.py
-│   │   ├── form_analyzer.py
-│   │   ├── tactical_analyzer.py
-│   │   ├── manager_analyzer.py  # NEW: Complete manager analysis
-│   │   ├── team_classifier.py
-│   │   └── strategy_router.py
-│   ├── infrastructure/         # System infrastructure
-│   │   ├── version_manager.py
-│   │   └── transition_manager.py
-│   ├── parameters/             # Parameter calculation
-│   │   ├── team_calculator.py
-│   │   └── league_calculator.py
-│   ├── prediction/             # Core prediction engine
-│   │   └── prediction_engine.py
-│   ├── reporting/              # Executive reporting
-│   │   └── executive_reports.py
-│   ├── statistics/             # Statistical models
-│   │   ├── distributions.py
-│   │   ├── bayesian.py
-│   │   └── optimization.py
-│   └── utils/                  # Utilities
-│       ├── constants.py
-│       ├── converters.py
-│       └── geographic.py
-├── tests/                      # Test suite
-│   ├── test_complete_system_integration.py
-│   ├── test_phase*_*.py
-│   └── test_manager_analysis.py
-├── docs/                       # Documentation
-│   ├── API_DOCUMENTATION.md
-│   ├── DEPLOYMENT_GUIDE.md
-│   └── DEVELOPER_GUIDE.md
-├── Implementation Guide/       # Phase implementation guides
-├── COMPREHENSIVE_SYSTEM_TEST_REPORT.md
-├── DATA_SOURCES_DOCUMENTATION.md
-├── MANAGER_ANALYSIS_COMPLETION_REPORT.md
-└── README.md                   # This file
 ```
 
 ---
 
-## 📖 Documentation
+## 💡 How It Works
 
-### Core Documentation
+### Execution Order (CRITICAL)
 
-- **[README.md](README.md)** - This file, project overview
-- **[API Documentation](docs/API_DOCUMENTATION.md)** - Complete API reference
-- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)** - AWS & production deployment
-- **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - Development setup & guidelines
-- **[Environment Configuration](docs/ENVIRONMENT_CONFIGURATION.md)** - Multi-environment & multi-tenant setup
+The system **MUST** be initialized in this specific order:
 
-### Technical Reports
+```
+1. League Parameter Handler  → Calculate league baselines
+   ↓
+2. Team Parameter Handler    → Calculate team strengths
+   ↓
+3. Fixture Ingestion        → Retrieve upcoming matches
+   ↓
+4. Prediction Handler       → Generate predictions (AUTOMATIC)
+   ↓
+5. API Service             → Query predictions
+```
 
-- **[System Test Report](COMPREHENSIVE_SYSTEM_TEST_REPORT.md)** - Complete test results
-- **[Data Sources](DATA_SOURCES_DOCUMENTATION.md)** - API-Football data sources
-- **[Manager Analysis](MANAGER_ANALYSIS_COMPLETION_REPORT.md)** - Coach analysis implementation
-- **[Integration Fixes](SYSTEM_INTEGRATION_FIXES_SUMMARY.md)** - Recent improvements
-- **[Table Isolation](TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)** - Environment-based table naming
+**Why this order?**
+- League parameters provide the baseline statistics
+- Team parameters calculate relative strengths using league context
+- Predictions combine both with fixture details
 
-### Architecture Documentation
-
-- **[New System Architecture](Implementation%20Guide/NEW_SYSTEM_ARCHITECTURE.md)** - 6-phase design
-- **[Phase Completion Reports](Implementation%20Guide/Completion%20Reports/)** - Phase-by-phase details
+📖 **Detailed workflow:** [Operational Workflow Guide](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md)
 
 ---
 
-## 🎓 How It Works
+## 🔧 Configuration
 
-### 1. Data Collection
+### AWS Resources
+- **Account:** 985019772236
+- **Region:** eu-west-2 (Europe - London)
+- **IAM Role:** FootballPredictionLambdaRole
+- **Lambda Layer:** scipy-layer:4 (numpy, pandas, scipy, scikit-learn)
 
-The system collects data from **API-Football** via RapidAPI:
-- Match results and statistics
-- Team formations and lineups
-- Venue information
-- Coach/manager profiles
-- Player injuries and suspensions
+### Environment Variables
+```bash
+AWS_DEFAULT_REGION=eu-west-2
+ENVIRONMENT=prod
+TABLE_PREFIX=football_
+TABLE_SUFFIX=_prod
+```
 
-### 2. Feature Extraction
-
-Each phase extracts specific features:
-
-**Phase 1: Opponent Stratification**
-- Classifies opponents into top/middle/bottom tiers
-- Calculates tier-specific performance metrics
-- Adjusts predictions based on opponent quality
-
-**Phase 2: Venue Analysis**
-- Stadium advantages and disadvantages
-- Travel distance impact on away teams
-- Playing surface effects
-- Geographic and timezone factors
-
-**Phase 3: Temporal Evolution**
-- Recent form (last 5-10 matches)
-- Momentum tracking
-- Seasonal patterns
-- Injury impacts
-- Fixture congestion effects
-
-**Phase 4: Tactical Intelligence**
-- Formation analysis (4-3-3, 4-4-2, etc.)
-- Tactical style scoring (8 dimensions)
-- Formation matchup predictions
-- Manager tactical profiles
-
-**Phase 5: Adaptive Strategy**
-- Team archetype classification (6 types)
-- Context-aware prediction routing
-- Adaptive weight calculation
-- Matchup-specific strategies
-
-**Phase 6: Confidence Calibration**
-- Statistical confidence calculation
-- Prediction reliability assessment
-- Executive reporting
-- System health monitoring
-
-### 3. Statistical Modeling
-
-Uses advanced statistical techniques:
-- **Negative Binomial Distribution** for goal probabilities
-- **Bayesian Smoothing** for parameter estimation
-- **Exponential Weighting** for temporal decay
-- **Isotonic Regression** for confidence calibration
-
-### 4. Prediction Generation
-
-Combines all phases to produce:
-- Goal probability distributions
-- Match outcome probabilities (win/draw/loss)
-- Most likely scorelines
-- Calibrated confidence scores
-- Tactical insights and key factors
+Load with:
+```bash
+source setup_deployment_env.sh
+```
 
 ---
 
-## 🔧 API Reference
+## 📊 System Status
 
-### Core Functions
+| Component | Count | Status |
+|-----------|-------|--------|
+| Lambda Functions | 5 | ✅ Deployed |
+| DynamoDB Tables | 6 | ✅ Active |
+| SQS Queues | 10 | ✅ Active |
+| Deployment | 100% | ✅ Complete |
 
-#### Generate Prediction
-
-```python
-from src.prediction.prediction_engine import generate_prediction_with_reporting
-
-prediction = generate_prediction_with_reporting(
-    home_team_id: int,           # Home team ID (API-Football)
-    away_team_id: int,           # Away team ID
-    league_id: int,              # League ID (e.g., 39 = Premier League)
-    season: int,                 # Season year (e.g., 2024)
-    venue_id: Optional[int],     # Venue ID (optional)
-    prediction_date: Optional[datetime],  # Date for temporal analysis
-    include_insights: bool = True  # Include executive insights
-) -> Dict
-```
-
-**Returns:**
-```python
-{
-    'predictions': {
-        'home_team': {
-            'score_probability': 0.75,
-            'most_likely_goals': 2,
-            'goal_probabilities': {0: 0.25, 1: 0.35, 2: 0.25, ...}
-        },
-        'away_team': {...}
-    },
-    'confidence_analysis': {
-        'calibration_method': 'isotonic_regression',
-        'confidence_factors': {...},
-        'reliability_assessment': 0.87
-    },
-    'metadata': {
-        'architecture_version': '6.0',
-        'features': [...],
-        'final_confidence': 0.82
-    },
-    'insights': {...}  # If include_insights=True
-}
-```
-
-#### Get Manager Profile
-
-```python
-from src.features.manager_analyzer import get_manager_profile
-
-profile = get_manager_profile(
-    team_id: int,
-    league_id: int,
-    season: int
-) -> Dict
-```
-
-#### Get Team Classification
-
-```python
-from src.features.team_classifier import classify_team_archetype
-
-archetype = classify_team_archetype(
-    team_id: int,
-    league_id: int,
-    season: int
-) -> str  # Returns: 'ELITE_CONSISTENT', 'MOMENTUM_DEPENDENT', etc.
-```
-
-See [API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) for complete reference.
+**Last Deployed:** 2025-10-05  
+**System Version:** v6.0  
+**Deployment Status:** 🟢 Fully Operational
 
 ---
 
 ## 🧪 Testing
 
-### Run All Tests
-
+### Run Tests
 ```bash
-# Complete system integration test
-python3 test_complete_system_integration.py
+# System integration tests
+python3 tests/test_complete_system_integration.py
 
-# Individual phase tests
-python3 test_phase1_integration.py
-python3 test_phase2_venue_analysis.py
-python3 test_phase4_tactical_intelligence.py
-python3 test_phase5_adaptive_strategy.py
-python3 test_phase6_confidence_calibration.py
-
-# Manager analysis tests
-python3 test_manager_analysis.py
-
-# Production readiness check
-python3 production_readiness_check.py
+# Phase-specific tests
+python3 tests/test_phase4_tactical_intelligence.py
+python3 tests/test_phase5_adaptive_strategy.py
+python3 tests/test_phase6_confidence_calibration.py
 ```
 
-### Test Results
-
-Latest test run (October 4, 2025):
-- ✅ **Overall Pass Rate:** 94% (47/50 tests)
-- ✅ **Phase 0-6:** All operational
-- ✅ **Integration:** 100% pass
-- ✅ **Performance:** Grade A
-
-See [COMPREHENSIVE_SYSTEM_TEST_REPORT.md](COMPREHENSIVE_SYSTEM_TEST_REPORT.md) for details.
-
----
-
-## 🚢 Deployment
-
-### AWS Lambda Deployment
-
+### Production Readiness Check
 ```bash
-# Package the application
-./scripts/package_lambda.sh
-
-# Deploy via AWS SAM
-sam deploy --guided
-
-# Or deploy manually
-aws lambda update-function-code \
-    --function-name football-predictions \
-    --zip-file fileb://deployment-package.zip
+python3 tests/production_readiness_check.py
 ```
 
-### Environment Variables
+---
 
-Required environment variables:
+## 📈 Monitoring
 
+### CloudWatch Logs
 ```bash
-# API Keys
-RAPIDAPI_KEY=your_rapidapi_key
+# View API Service logs
+aws logs tail /aws/lambda/football-api-service-prod --follow --region eu-west-2
 
-# AWS Configuration
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-AWS_DEFAULT_REGION=eu-west-2
-
-# DynamoDB Tables
-GAME_FIXTURES_TABLE=game_fixtures
-TEAM_PARAMETERS_TABLE=team_parameters
-LEAGUE_PARAMETERS_TABLE=league_parameters
+# View Prediction Handler logs
+aws logs tail /aws/lambda/football-prediction-handler-prod --follow --region eu-west-2
 ```
 
-See [DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) for complete deployment instructions.
-
----
-
-## 📈 Performance Optimization
-
-### Caching Strategy
-
-The system uses multi-layer caching:
-- **Venue Data:** 7-day TTL
-- **Tactical Data:** 48-hour TTL
-- **League Standings:** 24-hour TTL
-- **Team Parameters:** Per-match calculation with seasonal caching
-
-### API Rate Limiting
-
-Built-in rate limiting and retry logic:
-- Exponential backoff for 429 errors
-- 5-30 second wait times
-- Maximum 5 retries per request
-- Graceful degradation on failures
-
-### Cost Optimization
-
-Typical monthly costs (AWS):
-- **Lambda:** $0-5 (free tier)
-- **DynamoDB:** $5-25
-- **Data Transfer:** $1-5
-- **Total:** ~$6-35/month
-
----
-
-## 🛠️ Development
-
-### Setup Development Environment
-
+### Check System Health
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/football-fixture-predictions.git
-cd football-fixture-predictions
+# List all deployed functions
+aws lambda list-functions --region eu-west-2 \
+    --query "Functions[?contains(FunctionName, 'football')].FunctionName"
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
-python3 -m pytest tests/
-
-# Run linter
-python3 -m pylint src/
-```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-See [DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) for detailed guidelines.
-
----
-
-## 📊 Use Cases
-
-### 1. Match Outcome Prediction
-```python
-# Predict Premier League match
-prediction = generate_prediction_with_reporting(
-    home_team_id=33,    # Manchester United
-    away_team_id=40,    # Liverpool
-    league_id=39,       # Premier League
-    season=2024
-)
-```
-
-### 2. Tactical Analysis
-```python
-from src.features.tactical_analyzer import TacticalAnalyzer
-
-analyzer = TacticalAnalyzer()
-tactical_profile = analyzer.get_manager_tactical_profile(33, 39, 2024)
-```
-
-### 3. Team Performance Tracking
-```python
-from src.features.team_classifier import classify_team_archetype
-
-archetype = classify_team_archetype(33, 39, 2024)
-# Returns: 'ELITE_CONSISTENT', 'MOMENTUM_DEPENDENT', etc.
-```
-
-### 4. Venue Impact Analysis
-```python
-from src.features.venue_analyzer import VenueAnalyzer
-
-analyzer = VenueAnalyzer()
-stadium_advantage = analyzer.calculate_stadium_advantage(team_id, venue_id)
+# Check SQS queue depths
+aws sqs get-queue-attributes \
+    --queue-url https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-fixture-predictions_prod \
+    --attribute-names ApproximateNumberOfMessages \
+    --region eu-west-2
 ```
 
 ---
 
-## 🔍 Key Algorithms
+## 💰 Cost Estimate
 
-### Opponent Stratification (Phase 1)
-Classifies opponents into tiers based on league position:
-- **Top Tier:** Positions 1-6 (title contenders)
-- **Middle Tier:** Positions 7-14 (mid-table)
-- **Bottom Tier:** Positions 15-20 (relegation battlers)
+**Monthly Operational Cost:** ~$7-16
 
-Calculates separate parameters for each tier to improve prediction accuracy.
-
-### Bayesian Smoothing
-```python
-smoothed_value = (observed_value * sample_size + prior_mean * prior_weight) /
-                 (sample_size + prior_weight)
-```
-
-Prevents overfitting to small samples by incorporating league-wide priors.
-
-### Negative Binomial Distribution
-```python
-P(X = k) = Γ(k + r) / (k! * Γ(r)) * (1 - p)^k * p^r
-```
-
-Models goal scoring better than Poisson by accounting for overdispersion.
-
-### Confidence Calibration
-Uses isotonic regression to map predicted probabilities to actual outcomes, ensuring well-calibrated confidence scores.
+| Service | Monthly Cost |
+|---------|--------------|
+| DynamoDB (On-Demand) | $5-10 |
+| Lambda (50K invocations) | $0.20 |
+| SQS (100K requests) | $0.04 |
+| CloudWatch (Logs + metrics) | $2-5 |
 
 ---
 
-## 📝 License
+## 🔐 Security
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- ✅ IAM least-privilege permissions
+- ✅ Environment-based resource isolation
+- ✅ Credentials not in version control
+- ✅ DynamoDB encryption at rest
+- ✅ CloudWatch logging enabled
+- ✅ SQS Dead Letter Queues for error handling
+
+---
+
+## 📞 Support & Documentation
+
+**Main Documentation:** [docs/README.md](docs/README.md)
+
+**Quick Access:**
+- [How to Use](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md) - Step-by-step operational guide
+- [API Reference](docs/guides/API_DOCUMENTATION.md) - API endpoints and usage
+- [Deployment Status](docs/deployment/DEPLOYMENT_COMPLETE_SUMMARY.md) - Current deployment state
+- [Troubleshooting](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md#troubleshooting) - Common issues
+
+**Project Structure:**
+```
+├── docs/                    # All documentation
+│   ├── guides/             # User guides and API docs
+│   ├── deployment/         # Deployment guides and configs
+│   ├── architecture/       # System design and implementation
+│   └── reports/            # Test reports and validation
+├── src/                    # Source code
+│   ├── handlers/           # Lambda function handlers
+│   ├── parameters/         # Parameter calculators
+│   ├── prediction/         # Prediction engine
+│   ├── features/           # Feature extractors
+│   └── data/              # Data access layer
+├── scripts/               # Deployment scripts
+└── tests/                 # Test suites
+```
+
+---
+
+## 📄 License
+
+[LICENSE](LICENSE)
 
 ---
 
 ## 🙏 Acknowledgments
 
-- **API-Football** - Comprehensive football data API
-- **RapidAPI** - API platform and infrastructure
-- **AWS** - Cloud infrastructure (Lambda, DynamoDB)
-- **Contributors** - All developers who have contributed to this project
+- **API-Football** - Match data provider
+- **AWS Lambda** - Serverless compute platform
+- **Python Scientific Stack** - numpy, pandas, scipy, scikit-learn
 
 ---
 
-## 📞 Support
+**System Status:** 🟢 **OPERATIONAL**  
+**Documentation:** 📚 **COMPLETE**  
+**Deployment:** ✅ **PRODUCTION READY**
 
-### Documentation
-- [API Documentation](docs/API_DOCUMENTATION.md)
-- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
-- [Developer Guide](docs/DEVELOPER_GUIDE.md)
-
-### Issues
-For bugs and feature requests, please open an issue on GitHub.
-
-### Contact
-- **Email:** your.email@example.com
-- **GitHub:** [@yourusername](https://github.com/yourusername)
-
----
-
-## 🗺️ Roadmap
-
-### Version 7.0 (Planned)
-- [ ] Machine learning ensemble models
-- [ ] Player-level impact analysis
-- [ ] Live match prediction updates
-- [ ] Multi-league correlation analysis
-- [ ] Mobile app API
-
-### Future Enhancements
-- [ ] Weather impact integration
-- [ ] Referee bias analysis
-- [ ] Crowd sentiment analysis
-- [ ] Transfer window impact
-- [ ] Betting market integration
-
----
-
-## 📊 Statistics
-
-- **Lines of Code:** 25,000+
-- **Test Coverage:** 94%
-- **API Endpoints:** 15+
-- **Supported Leagues:** 100+ (via API-Football)
-- **Prediction Speed:** < 10ms average
-- **Accuracy:** 65-70% (typical for football predictions)
-
----
-
-## 🏆 Features Highlight
-
-| Feature | Status | Version |
-|---------|--------|---------|
-| Basic Predictions | ✅ Complete | 1.0 |
-| Opponent Stratification | ✅ Complete | 2.0 |
-| Venue Analysis | ✅ Complete | 3.0 |
-| Temporal Evolution | ✅ Complete | 4.0 |
-| Tactical Intelligence | ✅ Complete | 5.0 |
-| Adaptive Strategy | ✅ Complete | 6.0 |
-| Manager Analysis | ✅ Complete | 6.0 |
-| Confidence Calibration | ✅ Complete | 6.0 |
-
----
-
-**Built with ❤️ for football analytics enthusiasts**
-
-**Version:** 6.0 | **Status:** Production Ready ✅ | **Last Updated:** October 4, 2025
+For detailed operational instructions, see the [Operational Workflow Guide](docs/guides/OPERATIONAL_WORKFLOW_GUIDE.md).

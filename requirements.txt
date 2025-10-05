@@ -16,9 +16,6 @@ requests>=2.26.0,<3.0.0
 # Date & Time
 python-dateutil>=2.8.2,<3.0.0
 
-# Data Processing
-decimal>=1.0  # Built-in but specified for clarity
-
 # Utilities
 typing-extensions>=4.0.0  # For Python 3.8 compatibility
 

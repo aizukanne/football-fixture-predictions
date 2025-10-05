@@ -15,7 +15,7 @@ This project includes comprehensive documentation covering all aspects from quic
 
 ### For New Users
 
-1. **[README.md](../README.md)** - Start here!
+1. **[README.md](README.md)** - Start here!
    - Project overview
    - Quick start guide
    - Basic usage examples
@@ -35,7 +35,7 @@ This project includes comprehensive documentation covering all aspects from quic
 
 ### Development Documentation
 
-1. **[docs/DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** - Essential for developers
+1. **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** - Essential for developers
    - Development environment setup
    - Project structure explained
    - Architecture deep dive
@@ -44,7 +44,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Code style standards
    - Common development tasks
 
-2. **[docs/API_DOCUMENTATION.md](API_DOCUMENTATION.md)** - Complete API reference
+2. **[docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)** - Complete API reference
    - Core prediction API
    - Feature extraction APIs
    - Data access APIs
@@ -53,11 +53,11 @@ This project includes comprehensive documentation covering all aspects from quic
    - Error handling
    - Code examples
 
-3. **[requirements.txt](../requirements.txt)** - Production dependencies
+3. **[requirements.txt](requirements.txt)** - Production dependencies
    - Python package dependencies
    - Version specifications
 
-4. **[requirements-dev.txt](../requirements-dev.txt)** - Development dependencies
+4. **[requirements-dev.txt](requirements-dev.txt)** - Development dependencies
    - Testing frameworks
    - Code quality tools
    - Documentation tools
@@ -68,7 +68,7 @@ This project includes comprehensive documentation covering all aspects from quic
 
 ### Deployment Documentation
 
-1. **[docs/DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Production deployment
+1. **[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)** - Production deployment
    - AWS Lambda deployment (recommended)
    - Environment-based table isolation
    - Docker deployment
@@ -81,7 +81,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Performance tuning
    - Troubleshooting
 
-2. **[docs/ENVIRONMENT_CONFIGURATION.md](ENVIRONMENT_CONFIGURATION.md)** - Multi-environment setup
+2. **[docs/ENVIRONMENT_CONFIGURATION.md](docs/ENVIRONMENT_CONFIGURATION.md)** - Multi-environment setup
    - Environment-based table naming
    - Multi-environment deployments (dev/staging/prod)
    - Multi-tenant architecture
@@ -106,7 +106,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Known issues and recommendations
    - Acceptance criteria validation
 
-2. **[SYSTEM_INTEGRATION_FIXES_SUMMARY.md](../SYSTEM_INTEGRATION_FIXES_SUMMARY.md)**
+2. **[SYSTEM_INTEGRATION_FIXES_SUMMARY.md](SYSTEM_INTEGRATION_FIXES_SUMMARY.md)**
    - Recent fixes implemented
    - Issues resolved
    - Impact assessment
@@ -132,7 +132,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Data flow architecture
    - MongoDB migration guide
 
-2. **[MANAGER_ANALYSIS_COMPLETION_REPORT.md](../MANAGER_ANALYSIS_COMPLETION_REPORT.md)**
+2. **[MANAGER_ANALYSIS_COMPLETION_REPORT.md](MANAGER_ANALYSIS_COMPLETION_REPORT.md)**
    - Complete manager analysis implementation
    - API-Football coach data
    - Tactical profile extraction
@@ -140,7 +140,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Usage examples
    - Implementation details
 
-3. **[TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md](../TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)**
+3. **[TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md](TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)**
    - Environment-based table isolation
    - Implementation summary
    - Testing results
@@ -156,12 +156,12 @@ This project includes comprehensive documentation covering all aspects from quic
 
 Located in `Implementation Guide/` directory:
 
-1. **[NEW_SYSTEM_ARCHITECTURE.md](../Implementation%20Guide/NEW_SYSTEM_ARCHITECTURE.md)**
+1. **[NEW_SYSTEM_ARCHITECTURE.md](Implementation%20Guide/NEW_SYSTEM_ARCHITECTURE.md)**
    - 6-phase architecture design
    - System overview
    - Phase responsibilities
 
-2. **[SYSTEM_TEST_GUIDE.md](../Implementation%20Guide/SYSTEM_TEST_GUIDE.md)**
+2. **[SYSTEM_TEST_GUIDE.md](Implementation%20Guide/SYSTEM_TEST_GUIDE.md)**
    - Testing strategy
    - Test scenarios
    - Validation criteria
@@ -177,21 +177,21 @@ Located in `Implementation Guide/` directory:
 ### I want to...
 
 #### **Use the system**
-→ Start with [README.md](../README.md)
-→ Then read [docs/API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+→ Start with [README.md](README.md)
+→ Then read [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
 
 #### **Deploy to production**
-→ Read [docs/DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
+→ Read [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
 → Check [COMPREHENSIVE_SYSTEM_TEST_REPORT.md](COMPREHENSIVE_SYSTEM_TEST_REPORT.md)
 
 #### **Develop new features**
-→ Start with [docs/DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
-→ Reference [docs/API_DOCUMENTATION.md](API_DOCUMENTATION.md)
+→ Start with [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
+→ Reference [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
 → Check [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) for architecture
 
 #### **Understand the data**
 → Read [DATA_SOURCES_DOCUMENTATION.md](DATA_SOURCES_DOCUMENTATION.md)
-→ See [MANAGER_ANALYSIS_COMPLETION_REPORT.md](../MANAGER_ANALYSIS_COMPLETION_REPORT.md) for manager data
+→ See [MANAGER_ANALYSIS_COMPLETION_REPORT.md](MANAGER_ANALYSIS_COMPLETION_REPORT.md) for manager data
 
 #### **Understand the tests**
 → Read [COMPREHENSIVE_SYSTEM_TEST_REPORT.md](COMPREHENSIVE_SYSTEM_TEST_REPORT.md)
@@ -199,7 +199,7 @@ Located in `Implementation Guide/` directory:
 
 #### **Migrate to MongoDB**
 → See MongoDB section in [DATA_SOURCES_DOCUMENTATION.md](DATA_SOURCES_DOCUMENTATION.md)
-→ Follow deployment guide in [docs/DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
+→ Follow deployment guide in [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
 
 ---
 
@@ -209,31 +209,33 @@ Located in `Implementation Guide/` directory:
 football-fixture-predictions/
 ├── README.md                                    # Project overview & quick start
 ├── LICENSE                                      # MIT License
+├── PROJECT_SUMMARY.md                           # Complete project summary
+├── DOCUMENTATION_INDEX.md                       # This file
 ├── requirements.txt                             # Production dependencies
 ├── requirements-dev.txt                         # Development dependencies
 │
 ├── docs/                                        # Main documentation
-│   ├── PROJECT_SUMMARY.md                       # Complete project summary
-│   ├── DOCUMENTATION_INDEX.md                   # This file
 │   ├── API_DOCUMENTATION.md                     # Complete API reference
 │   ├── DEPLOYMENT_GUIDE.md                      # Deployment instructions
-│   ├── DEVELOPER_GUIDE.md                       # Development guide
-│   ├── ENVIRONMENT_CONFIGURATION.md             # Multi-environment setup
+│   └── DEVELOPER_GUIDE.md                       # Development guide
+│
+├── Test & Analysis Reports/
 │   ├── COMPREHENSIVE_SYSTEM_TEST_REPORT.md      # Complete test results
-│   ├── FINAL_SYSTEM_VALIDATION_REPORT.md        # Final validation
+│   ├── SYSTEM_INTEGRATION_FIXES_SUMMARY.md      # Recent fixes
+│   └── FINAL_SYSTEM_VALIDATION_REPORT.md        # Final validation
+│
+├── Feature Documentation/
 │   ├── DATA_SOURCES_DOCUMENTATION.md            # Data sources guide
-│   └── TABLE_ISOLATION_IMPLEMENTATION_GUIDE.md  # Table isolation guide
+│   └── MANAGER_ANALYSIS_COMPLETION_REPORT.md    # Manager analysis details
 │
-├── Implementation Guide/                         # Phase implementation guides
-│   ├── NEW_SYSTEM_ARCHITECTURE.md
-│   ├── SYSTEM_TEST_GUIDE.md
-│   └── Completion Reports/
-│       ├── PHASE_1_COMPLETION_REPORT.md
-│       ├── PHASE_2_COMPLETION_REPORT.md
-│       ├── PHASE_4_COMPLETION_REPORT.md
-│       └── ...
-│
-└── [remaining documentation files to be moved]
+└── Implementation Guide/                         # Phase implementation guides
+    ├── NEW_SYSTEM_ARCHITECTURE.md
+    ├── SYSTEM_TEST_GUIDE.md
+    └── Completion Reports/
+        ├── PHASE_1_COMPLETION_REPORT.md
+        ├── PHASE_2_COMPLETION_REPORT.md
+        ├── PHASE_4_COMPLETION_REPORT.md
+        └── ...
 ```
 
 ---
@@ -241,56 +243,56 @@ football-fixture-predictions/
 ## 🎯 Quick Links by Topic
 
 ### Architecture & Design
-- [Architecture Overview](../README.md#architecture)
-- [6-Phase System Design](../Implementation%20Guide/NEW_SYSTEM_ARCHITECTURE.md)
+- [Architecture Overview](README.md#architecture)
+- [6-Phase System Design](Implementation%20Guide/NEW_SYSTEM_ARCHITECTURE.md)
 - [System Components](PROJECT_SUMMARY.md#core-components)
 
 ### API & Usage
-- [Quick Start](../README.md#quick-start)
-- [API Reference](API_DOCUMENTATION.md)
-- [Usage Examples](API_DOCUMENTATION.md#examples)
+- [Quick Start](README.md#quick-start)
+- [API Reference](docs/API_DOCUMENTATION.md)
+- [Usage Examples](docs/API_DOCUMENTATION.md#examples)
 
 ### Development
-- [Development Setup](DEVELOPER_GUIDE.md#development-setup)
-- [Project Structure](DEVELOPER_GUIDE.md#project-structure)
-- [Code Style](DEVELOPER_GUIDE.md#code-style)
-- [Testing Guide](DEVELOPER_GUIDE.md#testing)
+- [Development Setup](docs/DEVELOPER_GUIDE.md#development-setup)
+- [Project Structure](docs/DEVELOPER_GUIDE.md#project-structure)
+- [Code Style](docs/DEVELOPER_GUIDE.md#code-style)
+- [Testing Guide](docs/DEVELOPER_GUIDE.md#testing)
 
 ### Deployment
-- [AWS Lambda Deployment](DEPLOYMENT_GUIDE.md#aws-lambda-deployment)
-- [Docker Deployment](DEPLOYMENT_GUIDE.md#docker-deployment)
-- [Environment Configuration](DEPLOYMENT_GUIDE.md#environment-configuration)
-- [Monitoring](DEPLOYMENT_GUIDE.md#monitoring--logging)
+- [AWS Lambda Deployment](docs/DEPLOYMENT_GUIDE.md#aws-lambda-deployment)
+- [Docker Deployment](docs/DEPLOYMENT_GUIDE.md#docker-deployment)
+- [Environment Configuration](docs/DEPLOYMENT_GUIDE.md#environment-configuration)
+- [Monitoring](docs/DEPLOYMENT_GUIDE.md#monitoring--logging)
 
 ### Data
 - [Data Sources Overview](DATA_SOURCES_DOCUMENTATION.md#overview)
 - [API-Football Integration](DATA_SOURCES_DOCUMENTATION.md#primary-data-source)
-- [Manager/Coach Data](../MANAGER_ANALYSIS_COMPLETION_REPORT.md)
+- [Manager/Coach Data](MANAGER_ANALYSIS_COMPLETION_REPORT.md)
 - [MongoDB Migration](DATA_SOURCES_DOCUMENTATION.md#database-migration-considerations)
 
 ### Testing
 - [Test Results](COMPREHENSIVE_SYSTEM_TEST_REPORT.md)
-- [Test Strategy](../Implementation%20Guide/SYSTEM_TEST_GUIDE.md)
-- [Running Tests](DEVELOPER_GUIDE.md#testing)
+- [Test Strategy](Implementation%20Guide/SYSTEM_TEST_GUIDE.md)
+- [Running Tests](docs/DEVELOPER_GUIDE.md#testing)
 
 ---
 
 ## 📖 Reading Order Recommendations
 
 ### For Quick Start (30 minutes)
-1. [README.md](../README.md) - 10 min
-2. [docs/API_DOCUMENTATION.md](API_DOCUMENTATION.md) - Examples section - 10 min
+1. [README.md](README.md) - 10 min
+2. [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) - Examples section - 10 min
 3. Try basic usage - 10 min
 
 ### For Development (2 hours)
-1. [README.md](../README.md) - 15 min
-2. [docs/DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) - 45 min
-3. [docs/API_DOCUMENTATION.md](API_DOCUMENTATION.md) - 30 min
+1. [README.md](README.md) - 15 min
+2. [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md) - 45 min
+3. [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) - 30 min
 4. Browse source code - 30 min
 
 ### For Deployment (3 hours)
-1. [README.md](../README.md) - 15 min
-2. [docs/DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - 90 min
+1. [README.md](README.md) - 15 min
+2. [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) - 90 min
 3. [COMPREHENSIVE_SYSTEM_TEST_REPORT.md](COMPREHENSIVE_SYSTEM_TEST_REPORT.md) - 30 min
 4. [DATA_SOURCES_DOCUMENTATION.md](DATA_SOURCES_DOCUMENTATION.md) - 30 min
 5. Deploy and test - 15 min
@@ -298,8 +300,8 @@ football-fixture-predictions/
 ### For Complete Understanding (1 day)
 1. All of the above
 2. [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - 30 min
-3. [Implementation Guide/](../Implementation%20Guide/) - 2 hours
-4. [MANAGER_ANALYSIS_COMPLETION_REPORT.md](../MANAGER_ANALYSIS_COMPLETION_REPORT.md) - 30 min
+3. [Implementation Guide/](Implementation%20Guide/) - 2 hours
+4. [MANAGER_ANALYSIS_COMPLETION_REPORT.md](MANAGER_ANALYSIS_COMPLETION_REPORT.md) - 30 min
 5. Source code deep dive - 3 hours
 
 ---
@@ -337,7 +339,7 @@ Found an issue with documentation?
 - Suggest improvements
 
 Want to contribute documentation?
-- Follow [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)
+- Follow [DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)
 - Submit pull request
 - Follow documentation style guide
 

@@ -1,0 +1,46 @@
+{
+  "environment": "prod",
+  "region": "eu-west-2",
+  "queues": {
+    "football-fixture-predictions": {
+      "queue_name": "football_football-fixture-predictions_prod",
+      "queue_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-fixture-predictions_prod",
+      "queue_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-fixture-predictions_prod",
+      "dlq_name": "football_football-prediction-dlq_prod",
+      "dlq_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-prediction-dlq_prod",
+      "dlq_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-prediction-dlq_prod"
+    },
+    "football-league-parameter-updates": {
+      "queue_name": "football_football-league-parameter-updates_prod",
+      "queue_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-league-parameter-updates_prod",
+      "queue_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-league-parameter-updates_prod",
+      "dlq_name": "football_football-league-dlq_prod",
+      "dlq_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-league-dlq_prod",
+      "dlq_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-league-dlq_prod"
+    },
+    "football-team-parameter-updates": {
+      "queue_name": "football_football-team-parameter-updates_prod",
+      "queue_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-team-parameter-updates_prod",
+      "queue_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-team-parameter-updates_prod",
+      "dlq_name": "football_football-team-dlq_prod",
+      "dlq_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-team-dlq_prod",
+      "dlq_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-team-dlq_prod"
+    },
+    "football-cache-updates": {
+      "queue_name": "football_football-cache-updates_prod",
+      "queue_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-cache-updates_prod",
+      "queue_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-cache-updates_prod",
+      "dlq_name": "football_football-cache-dlq_prod",
+      "dlq_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-cache-dlq_prod",
+      "dlq_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-cache-dlq_prod"
+    },
+    "football-match-results": {
+      "queue_name": "football_football-match-results_prod",
+      "queue_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-match-results_prod",
+      "queue_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-match-results_prod",
+      "dlq_name": "football_football-results-dlq_prod",
+      "dlq_url": "https://sqs.eu-west-2.amazonaws.com/985019772236/football_football-results-dlq_prod",
+      "dlq_arn": "arn:aws:sqs:eu-west-2:985019772236:football_football-results-dlq_prod"
+    }
+  }
+}
