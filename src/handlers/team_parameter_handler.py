@@ -82,9 +82,9 @@ def lambda_handler(event, context):
                     # Get team-specific data
                     team_games = games_played_per_team(league_id, season, team_id)
                     team_scores_df = filter_team_matches(all_scores_df, team_id)
-                    
-                    # Calculate team parameters
-                    team_dict = fit_team_params(team_scores_df, team_id, league_id)
+
+                    # Calculate team parameters with season for venue/tactical params
+                    team_dict = fit_team_params(team_scores_df, team_id, league_id, season=season)
                     
                     # Mark parameter source
                     if team_scores_df.empty or len(team_scores_df) < 10:
