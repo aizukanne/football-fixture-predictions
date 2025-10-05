@@ -475,7 +475,7 @@ def calculate_segmented_params_by_opponent_strength(df, team_id, league_id, seas
             # Get opponent tier from match perspective
             opponent_tier = get_opponent_tier_from_match(
                 match['home_team_id'], match['away_team_id'],
-                league_id, season, team_id
+                league_id, season
             )
             
             # Categorize match by opponent strength
