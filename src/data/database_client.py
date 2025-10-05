@@ -49,13 +49,14 @@ if dynamodb:
         print(f"Warning: Could not initialize DynamoDB tables: {e}")
 
 
-def get_team_params_from_db(unique_team_id):
+def get_team_params_from_db(team_id, league_id):
     """
     Retrieve team parameters from DynamoDB.
-    
+
     Args:
-        unique_team_id: Unique team identifier (format: "{league_id}-{team_id}")
-        
+        team_id: Team identifier (numeric)
+        league_id: League identifier (numeric)
+
     Returns:
         Team parameters dictionary or None if not found
     """
@@ -63,24 +64,28 @@ def get_team_params_from_db(unique_team_id):
         dynamodb = _get_dynamodb_resource()
         if not dynamodb:
             return None
-            
+
         teams_table = dynamodb.Table(TEAM_PARAMETERS_TABLE)
-        response = teams_table.get_item(Key={'team_id': unique_team_id})
+        response = teams_table.get_item(Key={
+            'team_id': int(team_id),
+            'league_id': int(league_id)
+        })
         if 'Item' in response:
             return response['Item']
         return None
     except Exception as e:
-        print(f"Error retrieving team parameters for {unique_team_id}: {e}")
+        print(f"Error retrieving team parameters for team_id={team_id}, league_id={league_id}: {e}")
         return None
 
 
-def get_league_params_from_db(league_id):
+def get_league_params_from_db(league_id, season=None):
     """
     Retrieve league parameters from DynamoDB.
-    
+
     Args:
         league_id: League identifier
-        
+        season: Season year (defaults to current year if not provided)
+
     Returns:
         League parameters dictionary or None if not found
     """
@@ -88,39 +93,49 @@ def get_league_params_from_db(league_id):
         dynamodb = _get_dynamodb_resource()
         if not dynamodb:
             return None
-            
+
+        # Default to current year if season not provided
+        if season is None:
+            from datetime import datetime
+            season = datetime.now().year
+
         league_table = dynamodb.Table(LEAGUE_PARAMETERS_TABLE)
-        response = league_table.get_item(Key={'league_id': league_id})
+        response = league_table.get_item(Key={
+            'league_id': int(league_id),
+            'season': int(season)
+        })
         if 'Item' in response:
             return response['Item']
         return None
     except Exception as e:
-        print(f"Error retrieving league parameters for {league_id}: {e}")
+        print(f"Error retrieving league parameters for league_id={league_id}, season={season}: {e}")
         return None
 
 
-def put_team_parameters(team_id, team_params):
+def put_team_parameters(team_id, league_id, team_params):
     """
     Store team parameters in DynamoDB.
-    
+
     Args:
-        team_id: Team identifier
+        team_id: Team identifier (numeric)
+        league_id: League identifier (numeric)
         team_params: Team parameters dictionary
-        
+
     Returns:
         True if successful, False otherwise
     """
     try:
         # Prepare data for DynamoDB
         item = convert_for_dynamodb(team_params)
-        item['team_id'] = team_id
+        item['team_id'] = int(team_id)
+        item['league_id'] = int(league_id)
         item['timestamp'] = int(datetime.now().timestamp())
-        
+
         teams_table.put_item(Item=item)
-        print(f"Successfully stored team parameters for {team_id}")
+        print(f"Successfully stored team parameters for team_id={team_id}, league_id={league_id}")
         return True
     except Exception as e:
-        print(f"Error storing team parameters for {team_id}: {e}")
+        print(f"Error storing team parameters for team_id={team_id}, league_id={league_id}: {e}")
         return False
 
 
@@ -228,22 +243,31 @@ def add_attribute_to_dynamodb_item(fixture_id, attribute_name, attribute_value):
         return False
 
 
-def fetch_league_parameters(league_id):
+def fetch_league_parameters(league_id, season=None):
     """
     Fetch league parameters with error handling.
-    
+
     Args:
         league_id: League identifier
-        
+        season: Season year (defaults to current year if not provided)
+
     Returns:
         League parameters dictionary or None if not found
     """
     try:
-        response = league_table.get_item(Key={'league_id': str(league_id)})
+        # Default to current year if season not provided
+        if season is None:
+            from datetime import datetime
+            season = datetime.now().year
+
+        response = league_table.get_item(Key={
+            'league_id': int(league_id),
+            'season': int(season)
+        })
         if 'Item' in response:
             return response['Item']
         else:
-            print(f"No league parameters found for league {league_id}")
+            print(f"No league parameters found for league {league_id}, season {season}")
             return None
     except Exception as e:
         print(f"Error fetching league parameters for {league_id}: {e}")
@@ -348,12 +372,12 @@ def update_fixture_scores(fixture_id, home_goals, away_goals):
     """
     Update fixture with final scores.
     Enhanced functionality from checkScores.py.
-    
+
     Args:
         fixture_id: Fixture identifier
         home_goals: Home team goals
         away_goals: Away team goals
-        
+
     Returns:
         True if successful, False otherwise
     """
@@ -371,6 +395,51 @@ def update_fixture_scores(fixture_id, home_goals, away_goals):
         return True
     except Exception as e:
         print(f"Error updating scores for fixture {fixture_id}: {e}")
+        return False
+
+
+def update_fixture_best_bet(fixture_id, best_bet_data):
+    """
+    Update fixture with best bet recommendations.
+
+    Args:
+        fixture_id: Fixture identifier
+        best_bet_data: List of best bet recommendations
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # First query to get the timestamp
+        response = webFE_table.query(
+            KeyConditionExpression=Key('fixture_id').eq(int(fixture_id)),
+            Limit=1
+        )
+
+        if not response['Items']:
+            print(f"No item found with fixture_id: {fixture_id}")
+            return False
+
+        timestamp = response['Items'][0]['timestamp']
+
+        # Update the item with best_bet attribute
+        update_response = webFE_table.update_item(
+            Key={
+                'fixture_id': int(fixture_id),
+                'timestamp': timestamp
+            },
+            UpdateExpression="SET best_bet = :val, has_best_bet = :has_bet",
+            ExpressionAttributeValues={
+                ':val': best_bet_data,
+                ':has_bet': True
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+
+        print(f"Successfully updated best bet for fixture {fixture_id}")
+        return True
+    except Exception as e:
+        print(f"Error updating best bet for fixture {fixture_id}: {e}")
         return False
 
 
@@ -428,14 +497,14 @@ class DatabaseClient:
     def __init__(self):
         pass
     
-    def get_team_params_from_db(self, unique_team_id):
-        return get_team_params_from_db(unique_team_id)
-    
-    def get_league_params_from_db(self, league_id):
-        return get_league_params_from_db(league_id)
-    
-    def put_team_parameters(self, team_id, team_params):
-        return put_team_parameters(team_id, team_params)
+    def get_team_params_from_db(self, team_id, league_id):
+        return get_team_params_from_db(team_id, league_id)
+
+    def get_league_params_from_db(self, league_id, season=None):
+        return get_league_params_from_db(league_id, season)
+
+    def put_team_parameters(self, team_id, league_id, team_params):
+        return put_team_parameters(team_id, league_id, team_params)
     
     def put_league_parameters(self, league_id, league_params):
         return put_league_parameters(league_id, league_params)
@@ -463,6 +532,9 @@ class DatabaseClient:
     
     def update_fixture_scores(self, fixture_id, home_goals, away_goals):
         return update_fixture_scores(fixture_id, home_goals, away_goals)
+
+    def update_fixture_best_bet(self, fixture_id, best_bet_data):
+        return update_fixture_best_bet(fixture_id, best_bet_data)
     
     def delete_team_parameters(self, team_id):
         return delete_team_parameters(team_id)

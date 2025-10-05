@@ -4,7 +4,7 @@ Coordinates team parameter calculation workflow using modular components.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..parameters.team_calculator import fit_team_params, calculate_team_multipliers
 from ..statistics.optimization import tune_weights_grid_team
@@ -43,9 +43,9 @@ def lambda_handler(event, context):
                 
             # Verify league parameters exist
             from ..data.database_client import fetch_league_parameters
-            league_params = fetch_league_parameters(league_id)
+            league_params = fetch_league_parameters(league_id, season)
             if not league_params:
-                print(f"No league parameters found for league {league_id}, skipping")
+                print(f"No league parameters found for league {league_id}, season {season}, skipping")
                 continue
             
             # Get teams in this league
@@ -103,7 +103,7 @@ def lambda_handler(event, context):
                     if not team_dict.get('using_league_params', True) and team_games > 10:
                         tune_results = tune_weights_grid_team(
                             team_scores_df,
-                            team_dict["mu"],
+                            team_dict,
                             team_dict["alpha"],
                             team_games
                         )
@@ -133,36 +133,37 @@ def lambda_handler(event, context):
                     # Add metadata
                     team_dict.update({
                         'team_name': team_name,
-                        'league_id': league_id,
                         'league_name': league_name,
                         'country': country,
                         'season': season,
                         'games_played': team_games,
                         'updated_at': int(datetime.now().timestamp())
                     })
-                    
-                    # Store team parameters
-                    unique_team_id = f"{league_id}-{team_id}"
-                    success = put_team_parameters(unique_team_id, team_dict)
+
+                    # Store team parameters with composite key (team_id + league_id)
+                    success = put_team_parameters(team_id, league_id, team_dict)
                     
                     if success:
                         print(f"Successfully stored parameters for team {team_name}")
                         results.append({
-                            'team_id': unique_team_id,
+                            'team_id': team_id,
+                            'league_id': league_id,
                             'status': 'success',
                             'using_league_params': team_dict.get('using_league_params', False)
                         })
                     else:
                         print(f"Failed to store parameters for team {team_name}")
                         results.append({
-                            'team_id': unique_team_id,
+                            'team_id': team_id,
+                            'league_id': league_id,
                             'status': 'storage_failed'
                         })
-                        
+
                 except Exception as e:
                     print(f"Error processing team {team_name}: {e}")
                     results.append({
-                        'team_id': f"{league_id}-{team_id}",
+                        'team_id': team_id,
+                        'league_id': league_id,
                         'status': 'error',
                         'error': str(e)
                     })
@@ -189,24 +190,97 @@ def lambda_handler(event, context):
 
 def get_match_scores_min_games(league_id, start_season_year, min_games=50, max_back=3):
     """
-    Get match scores with minimum games requirement.
-    This would need to be implemented based on the original logic.
+    Returns a DataFrame with at least `min_games` rows for the league.
+    Enhanced to include team IDs for team-specific analysis.
+    Starts with `start_season_year` and walks backwards
+    (max `max_back` seasons) until the quota is reached.
+
+    Args:
+        league_id: League identifier
+        start_season_year: Starting season year (e.g., "2024")
+        min_games: Minimum number of games required
+        max_back: Maximum number of seasons to go back
+
+    Returns:
+        pd.DataFrame: Combined match data from multiple seasons
     """
-    # Placeholder - would implement the actual data fetching logic
     import pandas as pd
-    return pd.DataFrame()
+    from ..data.api_client import get_football_match_scores
+
+    df_total = pd.DataFrame()
+    season = start_season_year
+
+    for _ in range(max_back + 1):
+        print(f"Fetching {season} data for league {league_id}")
+        df_season = get_football_match_scores(league_id, season)
+
+        # Only process if we got data with the right columns
+        if not df_season.empty and 'home_goals' in df_season.columns and 'away_goals' in df_season.columns:
+            df_total = pd.concat([df_total, df_season], ignore_index=True).dropna(subset=['home_goals', 'away_goals'])
+        else:
+            print(f"No valid match data for season {season}")
+
+        if len(df_total) >= min_games:
+            print(f"Reached {len(df_total)} matches")
+            break
+
+        season = str(int(season) - 1)
+
+    if len(df_total) == 0:
+        print("Still no data after fallback; downstream code will use defaults")
+
+    return df_total
 
 
 def filter_team_matches(df, team_id):
-    """Filter matches for a specific team."""
-    from ..parameters.team_calculator import filter_team_matches as filter_func
-    return filter_func(df, team_id)
+    """
+    Filter matches DataFrame to only include matches involving the specified team.
+
+    Args:
+        df: DataFrame with match data
+        team_id: Team ID to filter for
+
+    Returns:
+        Filtered DataFrame with only matches involving the team
+    """
+    if df.empty:
+        return df
+
+    team_matches = df[
+        (df['home_team_id'] == team_id) |
+        (df['away_team_id'] == team_id)
+    ]
+
+    return team_matches
 
 
 def games_played_per_team(league_id, season, team_id):
-    """Get number of games played by team."""
-    from ..parameters.team_calculator import games_played_per_team as games_func
-    return games_func(league_id, season, team_id)
+    """
+    Get the number of games played by a team in a specific league and season.
+
+    Args:
+        league_id: League identifier
+        season: Season year
+        team_id: Team identifier
+
+    Returns:
+        Number of games played
+    """
+    from ..data.api_client import get_team_statistics
+
+    try:
+        team_stats = get_team_statistics(league_id, season, team_id)
+
+        if team_stats and 'response' in team_stats and team_stats['response']:
+            fixtures = team_stats['response'].get('fixtures', {})
+            games_played = fixtures.get('played', {}).get('total', 0)
+            return games_played
+        else:
+            print(f"No statistics found for team {team_id}")
+            return 0
+    except Exception as e:
+        print(f"Error getting games played for team {team_id}: {e}")
+        return 0
 
 
 def get_default_team_multipliers(league_params):

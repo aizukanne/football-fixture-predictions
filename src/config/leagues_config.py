@@ -19,29 +19,8 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import the original leagues configuration
-try:
-    from leagues import allLeagues
-except ImportError as e:
-    print(f"Warning: Could not import leagues.py: {e}")
-    # Fallback configuration if leagues.py not available
-    allLeagues = {
-        'England': [
-            {'id': 39, 'name': 'Premier League', 'type': 'League'},
-            {'id': 40, 'name': 'Championship', 'type': 'League'}
-        ],
-        'Spain': [
-            {'id': 140, 'name': 'La Liga', 'type': 'League'}
-        ],
-        'Germany': [
-            {'id': 78, 'name': 'Bundesliga', 'type': 'League'}
-        ],
-        'Italy': [
-            {'id': 135, 'name': 'Serie A', 'type': 'League'}
-        ],
-        'France': [
-            {'id': 61, 'name': 'Ligue 1', 'type': 'League'}
-        ]
-    }
+# No fallback - leagues.py must be available in deployment package
+from leagues import allLeagues
 
 
 def get_all_leagues() -> List[Dict]:

@@ -30,7 +30,7 @@ from ..data.database_client import (
 )
 from ..parameters.team_calculator import calculate_team_points
 from ..utils.converters import convert_floats_to_decimal, decimal_default, decimal_to_float
-from ..utils.constants import FIXTURES_QUEUE_URL
+from ..utils.constants import BEST_BETS_QUEUE_URL
 
 
 def lambda_handler(event, context):
@@ -65,22 +65,19 @@ def process_fixtures(fixtures):
             league_id = fixture['league_id']
             season = fixture['season']
             date = fixture['date']
-            
-            # Get league parameters
-            league_params = get_league_params_from_db(league_id)
+
+            # Get league parameters with season
+            league_params = get_league_params_from_db(league_id, season)
             if not league_params:
-                print(f"No league parameters found for league {league_id}, skipping fixture {fixture_id}")
+                print(f"No league parameters found for league {league_id}, season {season}, skipping fixture {fixture_id}")
                 continue
                 
             league_params = decimal_to_float(league_params)
             print(f'League Params: {json.dumps(league_params, default=decimal_default)}')
 
-            unique_home_id = f"{league_id}-{home_team_id}"
-            unique_away_id = f"{league_id}-{away_team_id}"
-
-            # Get team parameters (fallback to league if not available)
-            home_params = get_team_params_from_db(unique_home_id) or league_params
-            away_params = get_team_params_from_db(unique_away_id) or league_params
+            # Get team parameters using composite key (fallback to league if not available)
+            home_params = get_team_params_from_db(home_team_id, league_id) or league_params
+            away_params = get_team_params_from_db(away_team_id, league_id) or league_params
             
             print(f'Home Before: {json.dumps(home_params, default=decimal_default)}')
             print(f'Away Before: {json.dumps(away_params, default=decimal_default)}')
@@ -336,11 +333,11 @@ def process_fixtures(fixtures):
 
 
 def send_to_sqs(data):
-    """Send processed fixture data to SQS queue."""
+    """Send processed fixture data to best bets queue for analysis."""
     sqs = boto3.client('sqs')
     payload = json.dumps(data, default=decimal_default)
     sqs.send_message(
-        QueueUrl=FIXTURES_QUEUE_URL,
+        QueueUrl=BEST_BETS_QUEUE_URL,
         MessageBody=payload
     )
 

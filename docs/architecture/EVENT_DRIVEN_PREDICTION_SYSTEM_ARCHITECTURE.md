@@ -70,6 +70,10 @@ graph TB
         PH -->|Read| TPDB
         PH -->|Read Caches| CACHES[(Various Caches)]
         PH -->|Store Results| PREDDB[(Predictions DB)]
+        PH -->|Send to Queue| BBQ[Best Bets Queue]
+
+        BBQ -->|Process Predictions| BBH[Best Bets Handler]
+        BBH -->|Analyze & Update| PREDDB
     end
 
     subgraph "Cache Management"
@@ -89,10 +93,12 @@ graph TB
         LPH -->|Failure| DLQ1[League DLQ]
         TPH -->|Failure| DLQ2[Team DLQ]
         PH -->|Failure| DLQ3[Prediction DLQ]
-        
+        BBH -->|Failure| DLQ4[Best Bets DLQ]
+
         DLQ1 --> SNS1[SNS Alert]
-        DLQ2 --> SNS2[SNS Alert]  
+        DLQ2 --> SNS2[SNS Alert]
         DLQ3 --> SNS3[SNS Alert]
+        DLQ4 --> SNS4[SNS Alert]
     end
 ```
 
@@ -147,6 +153,7 @@ graph TD
 | `football-league-parameter-updates` | League parameter computation | 15 minutes | 3 | `football-league-dlq` | 1 |
 | `football-team-parameter-updates` | Team parameter computation | 20 minutes | 3 | `football-team-dlq` | 1 |
 | `football-fixture-predictions` | Daily fixture predictions | 5 minutes | 2 | `football-prediction-dlq` | 10 |
+| `football-best-bets` | Best bet analysis from predictions | 2 minutes | 3 | `football-best-bets-dlq` | 10 |
 | `football-cache-updates` | Cache refresh operations | 2 minutes | 2 | `football-cache-dlq` | 5 |
 | `football-match-results` | Match result processing | 1 minute | 3 | `football-results-dlq` | 10 |
 
@@ -224,7 +231,8 @@ graph TD
 | `football-get-fixtures` | `get_fixtures.lambda_handler` | Python 3.11 | 256 MB | 5 min | `RAPIDAPI_KEY`, `FIXTURES_QUEUE_URL` |
 | `football-league-parameters` | `src.handlers.league_parameter_handler.lambda_handler` | Python 3.11 | 512 MB | 15 min | `RAPIDAPI_KEY`, `LEAGUE_PARAMS_TABLE` |
 | `football-team-parameters` | `src.handlers.team_parameter_handler.lambda_handler` | Python 3.11 | 1024 MB | 20 min | `RAPIDAPI_KEY`, `TEAM_PARAMS_TABLE` |
-| `football-predictions` | `src.handlers.prediction_handler.lambda_handler` | Python 3.11 | 512 MB | 5 min | `RAPIDAPI_KEY`, `PREDICTIONS_TABLE` |
+| `football-predictions` | `src.handlers.prediction_handler.lambda_handler` | Python 3.11 | 512 MB | 5 min | `RAPIDAPI_KEY`, `PREDICTIONS_TABLE`, `BEST_BETS_QUEUE_URL` |
+| `football-best-bets` | `src.handlers.best_bets_handler.lambda_handler` | Python 3.11 | 512 MB | 2 min | `TABLE_PREFIX`, `TABLE_SUFFIX` |
 | `football-match-analyzer` | `src.handlers.match_analyzer.lambda_handler` | Python 3.11 | 256 MB | 2 min | `LEAGUE_QUEUE_URL`, `TEAM_QUEUE_URL` |
 
 ### Update Frequency Matrix

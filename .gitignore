@@ -48,6 +48,7 @@ credentials.json
 
 # Deployment Packages
 deployment/
+lambda_deployment/
 deployment-package.zip
 football-predictions-lambda.zip
 *.zip

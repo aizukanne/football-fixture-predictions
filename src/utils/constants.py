@@ -94,6 +94,11 @@ FIXTURES_QUEUE_URL = os.getenv(
     # python -m src.infrastructure.create_all_sqs_queues --update-constants
 )
 
+BEST_BETS_QUEUE_URL = os.getenv(
+    'BEST_BETS_QUEUE_URL',
+    f'https://sqs.eu-west-2.amazonaws.com/{{account_id}}/{_get_table_name("football-best-bets")}'
+)
+
 # Default Values
 DEFAULT_LAMBDA_CEILING = 4.0
 MINIMUM_GAMES_THRESHOLD = 10

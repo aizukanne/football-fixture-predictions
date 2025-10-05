@@ -313,23 +313,27 @@ def get_injured_players(fixture_id, date, max_retries=DEFAULT_MAX_RETRIES):
 def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES):
     """
     Fetch match data for a specific team in a league from a given date.
-    
+
     Args:
         league_id: League identifier
         season: Season year
         team_id: Team identifier
-        from_date: Start date for fetching matches
+        from_date: Start date for fetching matches (format: YYYY-MM-DD)
         max_retries: Maximum retry attempts
-        
+
     Returns:
         Tuple of (team_parameters, match_details) or (None, None) if failed
     """
+    from datetime import datetime
+
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+    to_date = datetime.now().strftime("%Y-%m-%d")  # Fetch up to today
     params = {
         "league": str(league_id),
         "season": str(season),
         "team": str(team_id),
-        "from": from_date
+        "from": from_date,
+        "to": to_date  # Added missing parameter to match legacy version
     }
     
     data = _make_api_request(url, params, max_retries=max_retries)
@@ -450,11 +454,11 @@ def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIE
         if fixture["fixture"]["id"] != current_fixture_id:
             return {
                 "fixture_type": "home" if fixture["teams"]["home"]["id"] == team_id else "away",
-                "opponent": fixture["teams"]["away"]["name"] if fixture["teams"]["home"]["id"] == team_id else fixture["teams"]["home"]["name"],
+                "next_opponent": fixture["teams"]["away"]["name"] if fixture["teams"]["home"]["id"] == team_id else fixture["teams"]["home"]["name"],
                 "date": fixture["fixture"]["date"],
                 "league": fixture["league"]["name"]
             }
-    
+
     return None
 
 
@@ -612,3 +616,66 @@ class APIClient:
 
     def get_fixture_lineups(self, fixture_id, max_retries=DEFAULT_MAX_RETRIES):
         return get_fixture_lineups(fixture_id, max_retries)
+
+
+def get_football_match_scores(league_id, season, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Retrieves football match scores from the API-Football API and returns them as a DataFrame.
+    Enhanced to include team IDs for team-specific analysis.
+
+    Args:
+        league_id: The ID of the league to get scores for
+        season: The season to get scores for (e.g., "2024")
+        max_retries: Maximum retry attempts
+
+    Returns:
+        pd.DataFrame: DataFrame containing match details including team IDs and goals
+    """
+    import pandas as pd
+
+    url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+
+    params = {
+        "league": str(league_id),
+        "season": str(season)
+    }
+
+    data = _make_api_request(url, params, max_retries=max_retries)
+
+    if not data or "response" not in data or not data["response"]:
+        print(f"No match data found for league {league_id}, season {season}")
+        return pd.DataFrame()
+
+    # Initialize empty lists to store our data
+    match_data = []
+
+    # Process each fixture in the response
+    for fixture in data['response']:
+        # Check if the match is finished and has fulltime scores
+        if (fixture['fixture']['status']['long'] == 'Match Finished' and
+            fixture['score']['fulltime']['home'] is not None and
+            fixture['score']['fulltime']['away'] is not None):
+
+            match_info = {
+                'fixture_id': fixture['fixture']['id'],
+                'date': fixture['fixture']['date'],
+                'home_team': fixture['teams']['home']['name'],
+                'away_team': fixture['teams']['away']['name'],
+                'home_team_id': fixture['teams']['home']['id'],
+                'away_team_id': fixture['teams']['away']['id'],
+                'home_goals': fixture['score']['fulltime']['home'],
+                'away_goals': fixture['score']['fulltime']['away'],
+                'league_id': league_id,
+                'season': season
+            }
+            match_data.append(match_info)
+
+    # Create DataFrame from the collected data
+    df = pd.DataFrame(match_data)
+
+    if not df.empty:
+        print(f"Retrieved {len(df)} completed matches for league {league_id}, season {season}")
+    else:
+        print(f"No completed matches found for league {league_id}, season {season}")
+
+    return df

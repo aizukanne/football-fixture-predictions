@@ -2040,9 +2040,148 @@ def _calculate_improvement_percentage(strategy_comparisons, optimal_strategy):
     try:
         baseline = strategy_comparisons.get('standard_with_quality_boost', {}).get('predicted_accuracy', 0.6)
         optimal = strategy_comparisons.get(optimal_strategy, {}).get('predicted_accuracy', 0.6)
-        
+
         improvement = ((optimal - baseline) / baseline) * 100 if baseline > 0 else 0
         return round(improvement, 2)
-        
+
     except:
         return 0.0
+
+
+def analyze_match_probabilities(home_probs, away_probs):
+    """
+    Analyze match probabilities using probability distributions for home and away teams.
+
+    Parameters:
+    - home_probs: Dictionary mapping goals (0-10) to probabilities for home team
+    - away_probs: Dictionary mapping goals (0-10) to probabilities for away team
+
+    Returns:
+    - Dictionary with the following keys:
+        - most_likely_score: Tuple of (home_goals, away_goals) with highest probability
+        - most_likely_score_prob: Probability of the most likely score
+        - home_win_prob: Probability of home team winning
+        - draw_prob: Probability of a draw
+        - away_win_prob: Probability of away team winning
+        - over_0_5_prob: Probability of over 0.5 total goals
+        - over_1_5_prob: Probability of over 1.5 total goals
+        - over_2_5_prob: Probability of over 2.5 total goals
+        - over_3_5_prob: Probability of over 3.5 total goals
+        - over_4_5_prob: Probability of over 4.5 total goals
+        - btts_prob: Probability of both teams scoring (BTTS)
+        - exact_score_matrix: 2D array with probabilities for all score combinations
+    """
+    import numpy as np
+
+    results = {}
+
+    # Create a matrix of all possible score combinations
+    max_goals = 10
+    score_matrix = np.zeros((max_goals + 1, max_goals + 1))
+
+    # Fill the matrix with joint probabilities
+    for h_goals in range(max_goals + 1):
+        for a_goals in range(max_goals + 1):
+            # Joint probability (independent events)
+            score_matrix[h_goals, a_goals] = home_probs.get(h_goals, 0) * away_probs.get(a_goals, 0)
+
+    # Find the most likely score
+    max_prob_idx = np.unravel_index(np.argmax(score_matrix), score_matrix.shape)
+    most_likely_home_goals, most_likely_away_goals = max_prob_idx
+    most_likely_score_prob = score_matrix[most_likely_home_goals, most_likely_away_goals]
+
+    results['most_likely_score'] = (int(most_likely_home_goals), int(most_likely_away_goals))
+    results['most_likely_score_prob'] = float(most_likely_score_prob)
+
+    # Calculate match outcome probabilities
+    home_win_prob = 0
+    draw_prob = 0
+    away_win_prob = 0
+
+    for h_goals in range(max_goals + 1):
+        for a_goals in range(max_goals + 1):
+            prob = score_matrix[h_goals, a_goals]
+            if h_goals > a_goals:
+                home_win_prob += prob
+            elif h_goals == a_goals:
+                draw_prob += prob
+            else:
+                away_win_prob += prob
+
+    results['home_win_prob'] = float(home_win_prob)
+    results['draw_prob'] = float(draw_prob)
+    results['away_win_prob'] = float(away_win_prob)
+
+    # Calculate over/under probabilities
+    over_0_5_prob = 0
+    over_1_5_prob = 0
+    over_2_5_prob = 0
+    over_3_5_prob = 0
+    over_4_5_prob = 0
+
+    for h_goals in range(max_goals + 1):
+        for a_goals in range(max_goals + 1):
+            total_goals = h_goals + a_goals
+            prob = score_matrix[h_goals, a_goals]
+
+            if total_goals > 0:
+                over_0_5_prob += prob
+            if total_goals > 1:
+                over_1_5_prob += prob
+            if total_goals > 2:
+                over_2_5_prob += prob
+            if total_goals > 3:
+                over_3_5_prob += prob
+            if total_goals > 4:
+                over_4_5_prob += prob
+
+    results['over_0_5_prob'] = float(over_0_5_prob)
+    results['over_1_5_prob'] = float(over_1_5_prob)
+    results['over_2_5_prob'] = float(over_2_5_prob)
+    results['over_3_5_prob'] = float(over_3_5_prob)
+    results['over_4_5_prob'] = float(over_4_5_prob)
+
+    # Calculate both teams to score probability
+    btts_prob = 0
+    for h_goals in range(1, max_goals + 1):
+        for a_goals in range(1, max_goals + 1):
+            btts_prob += score_matrix[h_goals, a_goals]
+
+    results['btts_prob'] = float(btts_prob)
+
+    # Include a subset of the exact score probabilities (most common ones)
+    common_scores = {}
+    for h_goals in range(5):
+        for a_goals in range(5):
+            score_key = f"{h_goals}-{a_goals}"
+            common_scores[score_key] = float(score_matrix[h_goals, a_goals])
+
+    results['common_scores'] = common_scores
+
+    flat_scores = [
+        (f"{h}-{a}", score_matrix[h, a])
+        for h in range(max_goals + 1)
+        for a in range(max_goals + 1)
+    ]
+
+    results['flat_scores'] = flat_scores
+
+    # Store the full score matrix (converted to list for JSON compatibility)
+    results['exact_score_matrix'] = score_matrix.tolist()
+
+    # Calculate additional useful metrics
+    results['expected_home_goals'] = float(sum(g * p for g, p in home_probs.items()))
+    results['expected_away_goals'] = float(sum(g * p for g, p in away_probs.items()))
+    results['expected_total_goals'] = float(results['expected_home_goals'] + results['expected_away_goals'])
+
+    # Calculate under probabilities as complement of over
+    results['under_0_5_prob'] = float(1 - over_0_5_prob)
+    results['under_1_5_prob'] = float(1 - over_1_5_prob)
+    results['under_2_5_prob'] = float(1 - over_2_5_prob)
+    results['under_3_5_prob'] = float(1 - over_3_5_prob)
+    results['under_4_5_prob'] = float(1 - over_4_5_prob)
+
+    # Add no BTTS probability
+    results['no_btts_prob'] = float(1 - btts_prob)
+
+    return results

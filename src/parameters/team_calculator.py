@@ -1752,7 +1752,7 @@ def get_neutral_classification_params() -> Dict:
         'evolution_trend': 'stable',
         'archetype_stability': Decimal('0.5'),
         'classification_metadata': {
-            'classification_date': datetime.now(),
+            'classification_date': int(datetime.now().timestamp()),
             'fallback_reason': 'insufficient_data_or_error',
             'version': '5.0'
         }
@@ -1865,3 +1865,109 @@ def get_classification_multiplier_for_prediction(team_id: int, league_id: int, s
     except Exception as e:
         print(f"Error calculating classification multiplier for team {team_id}: {e}")
         return Decimal('1.0')
+
+
+def calculate_team_points(league_id, season, team_id, venue, match_details):
+    """
+    Calculate team points and statistics for prediction display.
+
+    Args:
+        league_id: League identifier
+        season: Season year
+        team_id: Team identifier
+        venue: 'home' or 'away'
+        match_details: Match details list [[goals_scored, goals_conceded, is_home], ...]
+
+    Returns:
+        Dict with team_info, team_logo, and team_goal_stats
+    """
+    from decimal import Decimal
+    from ..data.api_client import get_team_statistics
+
+    # Get team statistics from API
+    try:
+        data = get_team_statistics(league_id, season, team_id)
+
+        if data and 'response' in data and data['response']:
+            team_name = data["response"]["team"]["name"]
+            league_name = data["response"]["league"]["name"]
+            league_country = data["response"]["league"]["country"]
+            team_logo = data['response']['team']['logo']
+            total_games_played = data["response"]["fixtures"]["played"]["total"]
+
+            # Get win/draw/loss stats
+            home_wins = data["response"]["fixtures"]["wins"]["home"] or 0
+            away_wins = data["response"]["fixtures"]["wins"]["away"] or 0
+            home_draws = data["response"]["fixtures"]["draws"]["home"] or 0
+            away_draws = data["response"]["fixtures"]["draws"]["away"] or 0
+            home_losses = data["response"]["fixtures"]["loses"]["home"] or 0
+            away_losses = data["response"]["fixtures"]["loses"]["away"] or 0
+
+            # Calculate points
+            home_points = (home_wins * 3) + (home_draws * 1) + (home_losses * -1)
+            away_points = (away_wins * 4) + (away_draws * 2) + (away_losses * 0)
+            total_points = home_points + away_points
+
+            # Get goal stats
+            goals_for_home = data["response"]["goals"]["for"]["total"]["home"] or 0
+            goals_for_away = data["response"]["goals"]["for"]["total"]["away"] or 0
+            goals_for = goals_for_home + goals_for_away
+
+            goals_against_home = data["response"]["goals"]["against"]["total"]["home"] or 0
+            goals_against_away = data["response"]["goals"]["against"]["total"]["away"] or 0
+            goals_against = goals_against_home + goals_against_away
+
+            return {
+                'team_info': {
+                    'league_country': league_country,
+                    'league_name': league_name,
+                    'team_name': team_name,
+                    'total_games_played': total_games_played,
+                    'home_wins': home_wins,
+                    'home_draws': home_draws,
+                    'home_losses': home_losses,
+                    'away_wins': away_wins,
+                    'away_draws': away_draws,
+                    'away_losses': away_losses,
+                    'total_points': total_points,
+                    'home_performance': 0,
+                    'away_performance': 0,
+                    'performance': 0
+                },
+                'team_logo': team_logo,
+                'team_goal_stats': {
+                    'goals_for': goals_for,
+                    'goals_against': goals_against,
+                    'goal_difference': goals_for - goals_against
+                }
+            }
+        else:
+            raise ValueError(f"No valid team statistics data for team {team_id}")
+
+    except Exception as e:
+        print(f"Error in calculate_team_points for team {team_id}: {e}")
+        # Return minimal fallback structure
+        return {
+            'team_info': {
+                'league_country': 'Unknown',
+                'league_name': 'Unknown',
+                'team_name': f'Team {team_id}',
+                'total_games_played': 0,
+                'home_wins': 0,
+                'home_draws': 0,
+                'home_losses': 0,
+                'away_wins': 0,
+                'away_draws': 0,
+                'away_losses': 0,
+                'total_points': 0,
+                'home_performance': 0,
+                'away_performance': 0,
+                'performance': 0
+            },
+            'team_logo': '',
+            'team_goal_stats': {
+                'goals_for': 0,
+                'goals_against': 0,
+                'goal_difference': 0
+            }
+        }

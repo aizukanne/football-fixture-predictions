@@ -40,9 +40,9 @@ class APIClient:
 
 class DatabaseClient:
     @staticmethod
-    def get_team_params(team_id):
-        return get_team_params_from_db(team_id)
-    
+    def get_team_params(team_id, league_id):
+        return get_team_params_from_db(team_id, league_id)
+
     @staticmethod
     def get_league_params(league_id):
         return get_league_params_from_db(league_id)

@@ -1,15 +1,36 @@
 # API Service Layer Implementation Guide
 
-**Document Version:** 1.0  
-**Created:** 2025-10-04  
-**Status:** 🔧 Implementation Required  
-**Priority:** 🎯 **HIGH** - Essential for serving predictions to frontend applications  
+**Document Version:** 1.1
+**Created:** 2025-10-04
+**Updated:** 2025-10-05
+**Status:** ✅ **DEPLOYED TO PRODUCTION**
+**Priority:** 🎯 **HIGH** - Essential for serving predictions to frontend applications
 
 ## 📋 Executive Summary
 
-This document provides complete implementation guidelines for building the API service layer that serves prediction data to mobile apps and web frontends. The implementation is based on [`code-samples/analysis_backend_mobile.py`](../code-samples/analysis_backend_mobile.py) but architected for the new modular system with enhanced security, scalability, and integration with AWS API Gateway.
+This document provides complete implementation guidelines for the API service layer that serves prediction data to mobile apps and web frontends. The implementation is based on [`code-samples/analysis_backend_mobile.py`](../code-samples/analysis_backend_mobile.py) but architected for the new modular system with enhanced security, scalability, and integration with AWS API Gateway.
 
-**PURPOSE:** Create a production-ready REST API that allows external applications to query prediction data from the football fixture predictions system.
+**PURPOSE:** Production-ready REST API that allows external applications to query prediction data from the football fixture predictions system.
+
+## ✅ Deployment Status
+
+**API Gateway:** DEPLOYED
+- **API ID:** `esqyjhhc4e`
+- **Endpoint:** `https://esqyjhhc4e.execute-api.eu-west-2.amazonaws.com/prod`
+- **Stage:** `prod`
+- **Region:** `eu-west-2`
+
+**Lambda Function:** `football-api-service-prod`
+- **Runtime:** Python 3.13
+- **Memory:** 1024 MB
+- **Timeout:** 30 seconds
+- **Layer:** scipy-layer:4
+
+**Authentication:**
+- **Method:** API Key (x-api-key header)
+- **Usage Plan:** 10 req/sec, 20 burst, 10k/month quota
+
+**CORS:** Enabled for all origins
 
 ## 🔍 Analysis of Reference Code
 
