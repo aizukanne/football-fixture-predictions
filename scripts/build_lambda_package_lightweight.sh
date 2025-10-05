@@ -32,6 +32,7 @@ echo ""
 # Copy source code
 echo -e "${YELLOW}[2/6] Copying source code...${NC}"
 cp -r ../src .
+cp ../leagues.py .
 echo -e "${GREEN}✅ Source code copied${NC}"
 echo ""
 

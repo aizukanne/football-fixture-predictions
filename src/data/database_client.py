@@ -35,6 +35,19 @@ def _get_dynamodb_resource():
 # Export dynamodb for backward compatibility
 dynamodb = _get_dynamodb_resource()
 
+# Initialize table references at module level
+webFE_table = None
+league_table = None
+teams_table = None
+
+if dynamodb:
+    try:
+        webFE_table = dynamodb.Table(GAME_FIXTURES_TABLE)
+        league_table = dynamodb.Table(LEAGUE_PARAMETERS_TABLE)
+        teams_table = dynamodb.Table(TEAM_PARAMETERS_TABLE)
+    except Exception as e:
+        print(f"Warning: Could not initialize DynamoDB tables: {e}")
+
 
 def get_team_params_from_db(unique_team_id):
     """

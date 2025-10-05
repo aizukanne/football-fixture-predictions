@@ -4,13 +4,17 @@ Coordinates league parameter calculation workflow using modular components.
 """
 
 import json
+import requests
+import pandas as pd
 from datetime import datetime, timedelta
 
-from ..parameters.league_calculator import fit_league_params, calculate_league_multipliers
+from ..parameters.league_calculator import fit_league_params
+from ..parameters.multiplier_calculator import calculate_league_multipliers
 from ..statistics.optimization import tune_weights_grid
-from ..data.database_client import put_league_parameters
+from ..data.database_client import put_league_parameters, fetch_league_fixtures
 from ..data.api_client import get_league_start_date
 from ..utils.converters import convert_for_dynamodb
+from ..utils.constants import RAPIDAPI_KEY, API_FOOTBALL_BASE_URL, API_FOOTBALL_HOST
 from leagues import allLeagues
 
 
@@ -36,15 +40,15 @@ def lambda_handler(event, context):
         
         try:
             # Get season information
-            season = get_league_start_date(league_id)[:4]
-            if not season:
+            season_str = get_league_start_date(league_id)[:4]
+            if not season_str:
                 print(f"Couldn't determine season for league {league_id}, skipping")
                 continue
                 
             # Get match data for this league
             all_scores_df = get_match_scores_min_games(
                 league_id,
-                start_season_year=season,
+                start_season_year=season_str,
                 min_games=50,
                 max_back=3
             )
@@ -62,18 +66,31 @@ def lambda_handler(event, context):
             league_dict['ref_games'] = max(20, len(all_scores_df) // 10)
             
             # Tune weights using grid search
+            # Pass the entire league_dict as the mu parameter (it's a dictionary of parameters)
             tune_results = tune_weights_grid(
                 all_scores_df,
-                league_dict["mu"],
+                league_dict,  # Pass entire dict, not just mu value
                 league_dict["alpha"],
                 league_dict['ref_games']
             )
             league_dict.update(tune_results)
             
             # Calculate league multipliers from historical prediction data
+            # Define time window for multiplier calculation (last 210 days, similar to legacy)
+            end_time = int((datetime.now() - timedelta(days=1)).timestamp())
+            start_time = int((datetime.now() - timedelta(days=210)).timestamp())
+            
+            # Fetch historical fixtures for this league
+            print(f"Fetching fixtures for multiplier calculation: {country} - {league_name}")
+            fixtures_data = fetch_league_fixtures(country, league_name, start_time, end_time)
+            print(f"Found {len(fixtures_data)} fixtures for multiplier calculation")
+            
+            # Calculate multipliers using the new version-safe function
+            # Pass league_id and fixtures_data as required by the new signature
             multipliers = calculate_league_multipliers(
-                country, 
-                league_name,
+                league_id=league_id,
+                fixtures_data=fixtures_data,
+                version_filter=None,  # Use current version
                 min_sample_size=20
             )
             league_dict.update(multipliers)
@@ -82,7 +99,7 @@ def lambda_handler(event, context):
             league_dict.update({
                 'league_name': league_name,
                 'country': country,
-                'season': season,
+                'season': int(season_str),  # Convert to integer for DynamoDB
                 'total_matches': len(all_scores_df),
                 'updated_at': int(datetime.now().timestamp())
             })
@@ -128,22 +145,109 @@ def lambda_handler(event, context):
     }
 
 
+def get_football_match_scores(league_id, season):
+    """
+    Retrieves football match scores from the API-Football API and returns them as a DataFrame.
+    
+    Parameters:
+    league_id (str): The ID of the league to get scores for
+    season (str): The season to get scores for
+    
+    Returns:
+    pd.DataFrame: DataFrame containing home_goals and away_goals for completed matches
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+    
+    querystring = {
+        "league": league_id,
+        "season": season
+    }
+    
+    headers = {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": API_FOOTBALL_HOST
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=querystring)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        
+        data = response.json()
+        
+        # Initialize empty lists to store our data
+        match_data = []
+        
+        # Process each fixture in the response
+        for fixture in data['response']:
+            # Check if the match is finished and has fulltime scores
+            if (fixture['fixture']['status']['long'] == 'Match Finished' and
+                fixture['score']['fulltime']['home'] is not None and
+                fixture['score']['fulltime']['away'] is not None):
+                
+                match_info = {
+                    'home_team': fixture['teams']['home']['name'],
+                    'away_team': fixture['teams']['away']['name'],
+                    'home_goals': fixture['goals']['home'],
+                    'away_goals': fixture['goals']['away'],
+                    'match_date': fixture['fixture']['date']
+                }
+                
+                match_data.append(match_info)
+        
+        # Create DataFrame from the collected data
+        df = pd.DataFrame(match_data)
+        
+        # If we have data, return just the goal columns
+        if not df.empty:
+            result_df = df[['home_goals', 'away_goals']]
+            return result_df
+        
+        return pd.DataFrame()
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error making API request: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
+    except (KeyError, ValueError) as e:
+        print(f"Error processing response data: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
+
+
 def get_match_scores_min_games(league_id, start_season_year, min_games=50, max_back=3):
     """
-    Get match scores with minimum games requirement.
-    This would fetch historical match data for the league from the appropriate source.
+    Returns a DataFrame with at least `min_games` rows.
+    Starts with `start_season_year` and walks backwards
+    (max `max_back` seasons) until the quota is reached.
+    
+    Parameters:
+    league_id (str): The ID of the league to get scores for
+    start_season_year (str): Starting season year (e.g., '2024')
+    min_games (int): Minimum number of games required
+    max_back (int): Maximum number of seasons to look back
+    
+    Returns:
+    pd.DataFrame: DataFrame with at least min_games matches
     """
-    # This is a placeholder - would implement the actual data fetching logic
-    # that was in the original computeLeagueParameters.py file
-    import pandas as pd
+    df_total = pd.DataFrame()
+    season = start_season_year  # string, e.g. '2024'
     
-    # In the real implementation, this would:
-    # 1. Query match data from API or database
-    # 2. Filter by league_id and date range
-    # 3. Ensure minimum number of games
-    # 4. Return DataFrame with columns: home_team_id, away_team_id, home_goals, away_goals, date
+    for _ in range(max_back + 1):
+        print(f"Fetching {season} data for league {league_id}")
+        df_season = get_football_match_scores(league_id, season)
+        
+        # concatenate & drop any NA just in case
+        df_total = pd.concat([df_total, df_season], ignore_index=True).dropna()
+        
+        if len(df_total) >= min_games:
+            print(f"Reached {len(df_total)} matches for league {league_id}")
+            break
+        
+        # step back one year and try again
+        season = str(int(season) - 1)
     
-    return pd.DataFrame()
+    if len(df_total) == 0:
+        print(f"No match data found for league {league_id}")
+    
+    return df_total
 
 
 def validate_league_data(df, league_name, min_games=50):
