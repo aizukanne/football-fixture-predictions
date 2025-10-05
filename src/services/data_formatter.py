@@ -10,17 +10,23 @@ from decimal import Decimal
 class DataFormatter:
     """Service for formatting API response data."""
 
-    def format_fixture_response(self, fixtures: List[Dict]) -> List[Dict]:
+    def format_fixture_response(self, fixtures: List[Dict], full_details: bool = True) -> List[Dict]:
         """
         Format fixture data for single fixture response.
 
         Args:
             fixtures: Raw fixture data from database
+            full_details: If True, return complete record. If False, return filtered subset.
 
         Returns:
             List of formatted fixture dictionaries
         """
-        return [self._format_single_fixture(fixture) for fixture in fixtures]
+        if full_details:
+            # Return complete records with Decimal conversion
+            return [self._convert_decimals_recursive(fixture) for fixture in fixtures]
+        else:
+            # Return filtered subset for league queries
+            return [self._format_single_fixture(fixture) for fixture in fixtures]
 
     def format_league_response(self, query_result: Dict) -> Dict:
         """
@@ -64,7 +70,7 @@ class DataFormatter:
         # Extract home team data
         home_data = item.get('home', {})
         home_team = {
-            'team_id': home_data.get('team_id'),
+            'team_id': self._safe_decimal_convert(home_data.get('team_id')),
             'team_name': home_data.get('team_name'),
             'team_logo': home_data.get('team_logo'),
             'predicted_goals': self._safe_decimal_convert(home_data.get('predicted_goals')),
@@ -75,7 +81,7 @@ class DataFormatter:
         # Extract away team data
         away_data = item.get('away', {})
         away_team = {
-            'team_id': away_data.get('team_id'),
+            'team_id': self._safe_decimal_convert(away_data.get('team_id')),
             'team_name': away_data.get('team_name'),
             'team_logo': away_data.get('team_logo'),
             'predicted_goals': self._safe_decimal_convert(away_data.get('predicted_goals')),
@@ -85,7 +91,7 @@ class DataFormatter:
 
         # Build formatted response
         formatted_fixture = {
-            'fixture_id': item.get('fixture_id'),
+            'fixture_id': self._safe_decimal_convert(item.get('fixture_id')),
             'timestamp': self._safe_decimal_convert(item.get('timestamp')),
             'date': item.get('date'),
             'has_best_bet': has_best_bet,
@@ -128,3 +134,25 @@ class DataFormatter:
             else:
                 return float(value)
         return value
+
+    def _convert_decimals_recursive(self, obj: Any) -> Any:
+        """
+        Recursively convert all Decimal values in nested dictionaries/lists.
+
+        Args:
+            obj: Object to convert (can be dict, list, or primitive)
+
+        Returns:
+            Object with all Decimals converted to int/float
+        """
+        if isinstance(obj, dict):
+            return {key: self._convert_decimals_recursive(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_decimals_recursive(item) for item in obj]
+        elif isinstance(obj, Decimal):
+            if obj % 1 == 0:
+                return int(obj)
+            else:
+                return float(obj)
+        else:
+            return obj

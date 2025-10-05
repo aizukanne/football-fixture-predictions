@@ -116,8 +116,8 @@ class APIServiceHandler:
             if not fixture_data:
                 return APIResponse.not_found(f"Fixture {fixture_id} not found")
 
-            # Format response
-            formatted_data = self.data_formatter.format_fixture_response(fixture_data)
+            # Format response with full details for single fixture query
+            formatted_data = self.data_formatter.format_fixture_response(fixture_data, full_details=True)
 
             response_body = {
                 'items': formatted_data,
