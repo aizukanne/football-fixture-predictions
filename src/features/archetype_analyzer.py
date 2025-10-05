@@ -110,7 +110,7 @@ def analyze_performance_consistency(team_id: int, league_id: int, season: int) -
             'analysis_metadata': {
                 'team_id': team_id,
                 'matches_analyzed': len(match_results),
-                'analysis_date': datetime.now(),
+                'analysis_date': int(datetime.now().timestamp()),
                 'season': season
             },
             'version': '5.0'
@@ -200,7 +200,7 @@ def identify_performance_triggers(team_id: int, league_id: int, season: int) -> 
             'analysis_metadata': {
                 'team_id': team_id,
                 'matches_analyzed': len(matches),
-                'analysis_date': datetime.now(),
+                'analysis_date': int(datetime.now().timestamp()),
                 'season': season
             },
             'version': '5.0'
@@ -279,7 +279,7 @@ def calculate_archetype_stability(team_id: int, league_id: int, seasons: List[in
             'analysis_metadata': {
                 'team_id': team_id,
                 'seasons_analyzed': len(archetype_evolution),
-                'analysis_date': datetime.now(),
+                'analysis_date': int(datetime.now().timestamp()),
                 'season_range': f"{min(seasons)}-{max(seasons)}"
             },
             'version': '5.0'
@@ -368,7 +368,7 @@ def detect_archetype_outliers(team_id: int, archetype: str, league_id: int, seas
             'analysis_metadata': {
                 'team_id': team_id,
                 'archetype': archetype,
-                'analysis_date': datetime.now(),
+                'analysis_date': int(datetime.now().timestamp()),
                 'season': season
             },
             'version': '5.0'
@@ -425,7 +425,7 @@ def analyze_archetype_matchup_history(home_archetype: str, away_archetype: str,
             'analysis_metadata': {
                 'home_archetype': home_archetype,
                 'away_archetype': away_archetype,
-                'analysis_date': datetime.now(),
+                'analysis_date': int(datetime.now().timestamp()),
                 'seasons_considered': len(seasons)
             },
             'version': '5.0'
@@ -885,7 +885,7 @@ def _get_default_consistency_analysis() -> Dict:
         'streak_analysis': _get_default_streak_analysis(),
         'analysis_metadata': {
             'error': True,
-            'analysis_date': datetime.now()
+            'analysis_date': int(datetime.now().timestamp())
         },
         'version': '5.0'
     }
@@ -936,7 +936,7 @@ def _get_default_triggers_analysis() -> Dict:
         },
         'analysis_metadata': {
             'error': True,
-            'analysis_date': datetime.now()
+            'analysis_date': int(datetime.now().timestamp())
         },
         'version': '5.0'
     }
@@ -960,7 +960,7 @@ def _get_default_stability_analysis() -> Dict:
         },
         'analysis_metadata': {
             'error': True,
-            'analysis_date': datetime.now()
+            'analysis_date': int(datetime.now().timestamp())
         },
         'version': '5.0'
     }
@@ -980,7 +980,7 @@ def _get_default_outlier_analysis() -> Dict:
         },
         'analysis_metadata': {
             'error': True,
-            'analysis_date': datetime.now()
+            'analysis_date': int(datetime.now().timestamp())
         },
         'version': '5.0'
     }
@@ -1169,7 +1169,7 @@ def _get_default_matchup_history() -> Dict:
         'prediction_confidence': Decimal('0.6'),
         'analysis_metadata': {
             'error': True,
-            'analysis_date': datetime.now()
+            'analysis_date': int(datetime.now().timestamp())
         },
         'version': '5.0'
     }

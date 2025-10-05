@@ -107,7 +107,7 @@ def route_prediction_strategy(home_team_id: int, away_team_id: int,
                 'away_archetype': away_archetype,
                 'home_confidence': home_classification['archetype_confidence'],
                 'away_confidence': away_classification['archetype_confidence'],
-                'routing_date': datetime.now()
+                'routing_date': int(datetime.now().timestamp())
             },
             'version': '5.0'
         }
@@ -197,7 +197,7 @@ def calculate_adaptive_weights(home_archetype: str, away_archetype: str,
                 'home_archetype': home_archetype,
                 'away_archetype': away_archetype,
                 'context_adjustments': len(match_context),
-                'calculation_date': datetime.now()
+                'calculation_date': int(datetime.now().timestamp())
             }
         }
         
@@ -266,7 +266,7 @@ def get_archetype_matchup_dynamics(home_archetype: str, away_archetype: str) -> 
             'analysis_metadata': {
                 'home_archetype': home_archetype,
                 'away_archetype': away_archetype,
-                'analysis_date': datetime.now()
+                'analysis_date': int(datetime.now().timestamp())
             }
         }
         
@@ -327,7 +327,7 @@ def select_prediction_ensemble(strategy_name: str, team_characteristics: Dict) -
             'ensemble_metadata': {
                 'strategy_name': strategy_name,
                 'customization_applied': bool(team_characteristics),
-                'selection_date': datetime.now()
+                'selection_date': int(datetime.now().timestamp())
             }
         }
         
@@ -386,7 +386,7 @@ def evaluate_strategy_performance(strategy_name: str, historical_data: List[Dict
             'evaluation_metadata': {
                 'strategy_name': strategy_name,
                 'data_points': len(historical_data),
-                'evaluation_date': datetime.now()
+                'evaluation_date': int(datetime.now().timestamp())
             }
         }
         
@@ -610,7 +610,7 @@ def _get_default_strategy_routing() -> Dict:
         'matchup_type': 'standard',
         'routing_metadata': {
             'error': True,
-            'routing_date': datetime.now()
+            'routing_date': int(datetime.now().timestamp())
         },
         'version': '5.0'
     }
