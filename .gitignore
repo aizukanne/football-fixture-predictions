@@ -1,0 +1,143 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment Configuration Files
+.env
+.env.local
+.env.*.local
+*.env
+
+# AWS Configuration
+.aws/
+aws-config.json
+credentials.json
+
+# Deployment Packages
+deployment/
+deployment-package.zip
+football-predictions-lambda.zip
+*.zip
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.hypothesis/
+
+# Documentation with Sensitive Data
+# These contain account numbers, keys, and configuration details
+docs/DEPLOYMENT_CREDENTIALS_STATUS.md
+docs/FINAL_DEPLOYMENT_CONFIGURATION.md
+docs/DEPLOYMENT_CONFIGURATION_*.md
+docs/*_CREDENTIALS_*.md
+docs/*_KEYS_*.md
+
+# Credential Validation Scripts Output
+credential_validation_*.txt
+deployment_validation_*.json
+validation_results_*.json
+
+# Temporary Files
+temp_*
+tmp_*
+*.tmp
+*.bak
+*.swp
+
+# API Keys and Secrets
+*_key.txt
+*_secret.txt
+api_keys.txt
+secrets.txt
+
+# Database Connection Strings
+connection_strings.txt
+database_config.json
+
+# Test Results with Sensitive Data
+tests/integration_test_results_*.json
+tests/performance_validation_*.json
+tests/production_readiness_*.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Project Specific
+# Add any project-specific files that should not be version controlled
+
+# Keep README and basic documentation
+!README.md
+!docs/README.md
+!docs/API_DOCUMENTATION.md
+!docs/DEVELOPER_GUIDE.md
+!docs/DEPLOYMENT_GUIDE.md
+
+# Keep implementation guides (no sensitive data)
+!docs/PROJECT_SUMMARY.md
+!docs/DOCUMENTATION_INDEX.md
+!docs/COMPREHENSIVE_SYSTEM_TEST_REPORT.md
+!docs/FINAL_SYSTEM_VALIDATION_REPORT.md
+!docs/DATA_SOURCES_DOCUMENTATION.md
+!docs/MANAGER_ANALYSIS_COMPLETION_REPORT.md
+!docs/SYSTEM_INTEGRATION_FIXES_SUMMARY.md
+!docs/TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md
+!docs/COMPREHENSIVE_PRE_DEPLOYMENT_CHECKLIST.md
+!docs/PRE_DEPLOYMENT_FINDINGS_AND_RECOMMENDATIONS.md
+!docs/ENVIRONMENT_CONFIGURATION.md
+!docs/TABLE_ISOLATION_IMPLEMENTATION_GUIDE.md
+!docs/DATABASE_SCHEMA_DOCUMENTATION.md
+
+# Keep deployment scripts (no sensitive data)
+!setup_deployment_env.sh
+!validate_deployment_credentials.py
