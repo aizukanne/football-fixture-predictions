@@ -103,7 +103,7 @@ def classify_team_archetype(team_id: int, league_id: int, season: int) -> Dict:
             'archetype_stability': stability,
             'evolution_trend': evolution_trend,
             'archetype_scores': archetype_scores,
-            'classification_date': datetime.now(),
+            'classification_date': int(datetime.now().timestamp()),
             'version': '5.0',
             'phase5_enabled': True,
             'integration_test_ready': True,
@@ -124,7 +124,7 @@ def classify_team_archetype(team_id: int, league_id: int, season: int) -> Dict:
             'archetype_stability': Decimal('0.7'),
             'evolution_trend': 'stable',
             'archetype_scores': {'balanced': Decimal('0.7')},
-            'classification_date': datetime.now(),
+            'classification_date': int(datetime.now().timestamp()),
             'error': str(e),
             'version': '5.0',
             'phase5_enabled': True,
@@ -199,7 +199,7 @@ def get_team_performance_profile(team_id: int, league_id: int, season: int) -> D
             'defensive_profile': defensive_profile,
             'mentality_profile': mentality_profile,
             'tactical_profile': tactical_profile,
-            'profile_date': datetime.now(),
+            'profile_date': int(datetime.now().timestamp()),
             'match_count': len(matches),
             'version': '5.0'
         }
@@ -369,7 +369,7 @@ def analyze_team_clustering(league_id: int, season: int, n_clusters: Optional[in
                 'mean': scaler.mean_.tolist(),
                 'scale': scaler.scale_.tolist()
             },
-            'clustering_date': datetime.now(),
+            'clustering_date': int(datetime.now().timestamp()),
             'version': '5.0'
         }
         
@@ -719,7 +719,7 @@ def _get_default_performance_profile() -> Dict:
         'defensive_profile': _get_default_defensive_profile(),
         'mentality_profile': _get_default_mentality_profile(),
         'tactical_profile': _get_default_tactical_profile(),
-        'profile_date': datetime.now(),
+        'profile_date': int(datetime.now().timestamp()),
         'match_count': 0,
         'version': '5.0'
     }
