@@ -276,17 +276,46 @@ aws lambda update-function-configuration \
     --region "$AWS_REGION" \
     2>/dev/null || true
 
-# Add SQS trigger
+# Add SQS trigger (batch size 1 = one league at a time)
 echo -e "${YELLOW}  Configuring SQS trigger...${NC}"
 TEAM_QUEUE_ARN="arn:aws:sqs:${AWS_REGION}:${AWS_ACCOUNT_ID}:football_football-team-parameter-updates_${ENVIRONMENT}"
 aws lambda create-event-source-mapping \
     --function-name "football-team-parameter-handler-${ENVIRONMENT}" \
     --event-source-arn "$TEAM_QUEUE_ARN" \
-    --batch-size 5 \
+    --batch-size 1 \
+    --maximum-concurrency 10 \
     --region "$AWS_REGION" \
     2>/dev/null || echo "  (SQS trigger already exists)"
 
 echo -e "${GREEN}✅ Team Parameter Handler deployed${NC}"
+# Deploy Team Parameter Dispatcher
+echo -e "${YELLOW}[7/7] Deploying Team Parameter Dispatcher...${NC}"
+aws lambda create-function \
+    --function-name "football-team-parameter-dispatcher-${ENVIRONMENT}" \
+    --runtime python3.13 \
+    --role "$IAM_ROLE_ARN" \
+    --handler src.handlers.team_parameter_dispatcher.lambda_handler \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --timeout 60 \
+    --memory-size 256 \
+    --layers "$LAMBDA_LAYER_ARN" \
+    --environment "Variables={ENVIRONMENT=${ENVIRONMENT},AWS_REGION=${AWS_REGION},TEAM_PARAMETER_QUEUE_URL=https://sqs.${AWS_REGION}.amazonaws.com/${AWS_ACCOUNT_ID}/football_football-team-parameter-updates_${ENVIRONMENT}}" \
+    --region "$AWS_REGION" \
+    2>/dev/null || aws lambda update-function-code \
+    --function-name "football-team-parameter-dispatcher-${ENVIRONMENT}" \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --region "$AWS_REGION"
+
+aws lambda update-function-configuration \
+    --function-name "football-team-parameter-dispatcher-${ENVIRONMENT}" \
+    --runtime python3.13 \
+    --layers "$LAMBDA_LAYER_ARN" \
+    --region "$AWS_REGION" \
+    2>/dev/null || true
+
+echo -e "${GREEN}✅ Team Parameter Dispatcher deployed${NC}"
+echo ""
+
 echo ""
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
@@ -303,6 +332,7 @@ echo "  3. football-prediction-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo "  4. football-league-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo "  5. football-best-bets-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo "  6. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
+echo "  7. football-team-parameter-dispatcher-${ENVIRONMENT} (python3.13 + layer)"
 echo ""
 
 echo -e "${YELLOW}Verify Deployment:${NC}"
