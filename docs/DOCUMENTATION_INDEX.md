@@ -44,7 +44,16 @@ This project includes comprehensive documentation covering all aspects from quic
    - Code style standards
    - Common development tasks
 
-2. **[docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)** - Complete API reference
+2. **[docs/guides/PREDICTION_COMPUTATION_GUIDE.md](docs/guides/PREDICTION_COMPUTATION_GUIDE.md)** - How predictions are computed
+   - Core lambda calculation formula
+   - Team parameter application
+   - Multi-phase prediction flow (Phases 0-6)
+   - Bayesian smoothing explained
+   - Parameter sources and types
+   - Complete calculation walkthrough
+   - Visual flow diagram
+
+3. **[docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)** - Complete API reference
    - Core prediction API
    - Feature extraction APIs
    - Data access APIs
@@ -53,11 +62,11 @@ This project includes comprehensive documentation covering all aspects from quic
    - Error handling
    - Code examples
 
-3. **[requirements.txt](requirements.txt)** - Production dependencies
+4. **[requirements.txt](requirements.txt)** - Production dependencies
    - Python package dependencies
    - Version specifications
 
-4. **[requirements-dev.txt](requirements-dev.txt)** - Development dependencies
+5. **[requirements-dev.txt](requirements-dev.txt)** - Development dependencies
    - Testing frameworks
    - Code quality tools
    - Documentation tools
@@ -123,7 +132,16 @@ This project includes comprehensive documentation covering all aspects from quic
 
 ### Specific Features
 
-1. **[DATA_SOURCES_DOCUMENTATION.md](DATA_SOURCES_DOCUMENTATION.md)**
+1. **[docs/guides/PREDICTION_COMPUTATION_GUIDE.md](docs/guides/PREDICTION_COMPUTATION_GUIDE.md)**
+   - Complete prediction computation explanation
+   - Lambda calculation formula
+   - Team parameters and their application
+   - Multi-phase enhancement system
+   - Visual prediction flow diagram
+   - Example calculations
+   - Code references
+
+2. **[DATA_SOURCES_DOCUMENTATION.md](DATA_SOURCES_DOCUMENTATION.md)**
    - All data sources explained
    - API-Football endpoints used
    - Venue analysis data
@@ -132,7 +150,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Data flow architecture
    - MongoDB migration guide
 
-2. **[MANAGER_ANALYSIS_COMPLETION_REPORT.md](MANAGER_ANALYSIS_COMPLETION_REPORT.md)**
+3. **[MANAGER_ANALYSIS_COMPLETION_REPORT.md](MANAGER_ANALYSIS_COMPLETION_REPORT.md)**
    - Complete manager analysis implementation
    - API-Football coach data
    - Tactical profile extraction
@@ -140,7 +158,7 @@ This project includes comprehensive documentation covering all aspects from quic
    - Usage examples
    - Implementation details
 
-3. **[TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md](TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)**
+4. **[TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md](TABLE_ISOLATION_IMPLEMENTATION_COMPLETE.md)**
    - Environment-based table isolation
    - Implementation summary
    - Testing results
@@ -179,6 +197,10 @@ Located in `Implementation Guide/` directory:
 #### **Use the system**
 → Start with [README.md](README.md)
 → Then read [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md)
+
+#### **Understand how predictions work**
+→ Read [docs/guides/PREDICTION_COMPUTATION_GUIDE.md](docs/guides/PREDICTION_COMPUTATION_GUIDE.md)
+→ Check [docs/API_DOCUMENTATION.md](docs/API_DOCUMENTATION.md) for usage
 
 #### **Deploy to production**
 → Read [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
@@ -246,6 +268,7 @@ football-fixture-predictions/
 - [Architecture Overview](README.md#architecture)
 - [6-Phase System Design](Implementation%20Guide/NEW_SYSTEM_ARCHITECTURE.md)
 - [System Components](PROJECT_SUMMARY.md#core-components)
+- [Prediction Computation](docs/guides/PREDICTION_COMPUTATION_GUIDE.md)
 
 ### API & Usage
 - [Quick Start](README.md#quick-start)
@@ -311,6 +334,7 @@ football-fixture-predictions/
 ### Version History
 - **v6.0.0** - October 4, 2025 - Complete documentation suite created
 - **v6.0.1** - October 4, 2025 - Manager analysis documentation added
+- **v6.0.2** - October 6, 2025 - Prediction computation guide added
 
 ### Maintenance
 Documentation is maintained alongside code. When contributing:
@@ -374,6 +398,6 @@ All documentation is:
 
 ---
 
-**Last Updated:** October 4, 2025
-**Documentation Version:** 6.0
+**Last Updated:** October 6, 2025
+**Documentation Version:** 6.0.2
 **Status:** Complete ✅
