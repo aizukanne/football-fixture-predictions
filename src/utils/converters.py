@@ -6,6 +6,7 @@ Consolidates duplicate conversion functions from across the codebase.
 import json
 import numpy as np
 from decimal import Decimal
+from datetime import datetime
 
 
 def decimal_default(obj):
@@ -100,10 +101,10 @@ def convert_for_json(obj):
 def convert_for_dynamodb(data):
     """
     Prepare data for DynamoDB storage by converting appropriate types.
-    
+
     Args:
         data: Data structure to prepare for DynamoDB
-        
+
     Returns:
         Data structure ready for DynamoDB storage
     """
@@ -111,6 +112,8 @@ def convert_for_dynamodb(data):
         return {k: convert_for_dynamodb(v) for k, v in data.items()}
     elif isinstance(data, list):
         return [convert_for_dynamodb(item) for item in data]
+    elif isinstance(data, datetime):
+        return int(data.timestamp())
     elif isinstance(data, float):
         return Decimal(str(data))
     elif isinstance(data, np.integer):

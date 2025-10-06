@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from decimal import Decimal
 
-from ..data.database_client import get_fixture_by_id, update_fixture_best_bet
+from ..data.database_client import update_fixture_best_bet
 
 
 def lambda_handler(event, context):

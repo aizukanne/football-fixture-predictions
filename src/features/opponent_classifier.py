@@ -38,13 +38,15 @@ class OpponentClassifier:
     """
     
     def __init__(self):
+        from ..utils.constants import _get_table_name
         self.dynamodb = boto3.resource('dynamodb')
         self.version_manager = VersionManager()
         self.logger = logging.getLogger(__name__)
-        
-        # Initialize standings cache table
+
+        # Initialize standings cache table with proper environment naming
         try:
-            self.cache_table = self.dynamodb.Table('league_standings_cache')
+            table_name = _get_table_name('league_standings_cache')
+            self.cache_table = self.dynamodb.Table(table_name)
         except Exception as e:
             self.logger.warning(f"Could not connect to league_standings_cache table: {e}")
             self.cache_table = None
@@ -369,7 +371,7 @@ class OpponentClassifier:
             self.logger.debug(f"Opponent {opponent_id} classified as '{tier}' tier")
             return tier
         else:
-            self.logger.warning(f"Team {opponent_id} not found in standings for league {league_id}")
+            self.logger.warning(f"Team {opponent_id} not found in standings for league {league_id}, season {season}")
             return 'middle'  # Default fallback when team not found
     
     def get_team_tier(self, team_id: int, league_id: int, season: str) -> str:
@@ -396,6 +398,41 @@ class OpponentClassifier:
 
 
 # Convenience functions for backward compatibility and ease of use
+
+def get_opponent_tier_from_match(home_team_id: int, away_team_id: int,
+                                league_id: int, season: str,
+                                perspective_team_id: int = None) -> str:
+    """
+    Determine opponent strength tier from perspective of a specific team.
+    
+    This is a convenience wrapper for the OpponentClassifier method that
+    automatically fetches and caches league standings when needed.
+    
+    Args:
+        home_team_id: Home team ID
+        away_team_id: Away team ID
+        league_id: League ID
+        season: Season year (as string)
+        perspective_team_id: The team whose perspective we're analyzing from.
+                           If None, will try to infer from context.
+        
+    Returns:
+        str: Opponent tier ('top', 'middle', 'bottom')
+    """
+    classifier = OpponentClassifier()
+    
+    # If perspective_team_id not provided, this is an error in calling code
+    if perspective_team_id is None:
+        logging.getLogger(__name__).error(
+            f"perspective_team_id is required for get_opponent_tier_from_match. "
+            f"Match: {home_team_id} vs {away_team_id}"
+        )
+        return 'middle'  # Default fallback
+    
+    return classifier.get_opponent_tier_from_match(
+        home_team_id, away_team_id, league_id, season, perspective_team_id
+    )
+
 
 def classify_opponent_strength(team_id: int, league_id: int, season: int) -> str:
     """
@@ -463,31 +500,6 @@ def classify_team_by_position(league_position: int, total_teams: int) -> str:
     classifier = OpponentClassifier()
     return classifier.classify_team_by_position(league_position, total_teams)
 
-
-def get_opponent_tier_from_match(home_team_id: int, away_team_id: int,
-                               league_id: int, season: str) -> str:
-    """
-    Convenience function to determine opponent tier from match perspective.
-    For integration testing, we'll analyze from home team's perspective by default.
-    
-    Args:
-        home_team_id: Home team ID
-        away_team_id: Away team ID
-        league_id: League ID
-        season: Season year
-        
-    Returns:
-        str: Opponent tier ('top', 'middle', 'bottom')
-    """
-    try:
-        classifier = OpponentClassifier()
-        # For integration testing, use home team's perspective
-        return classifier.get_opponent_tier_from_match(
-            home_team_id, away_team_id, league_id, season, home_team_id
-        )
-    except Exception as e:
-        # Return default tier for integration testing
-        return 'middle'
 
 
 def cache_league_standings(league_id: int, season: str, standings_data: Dict):

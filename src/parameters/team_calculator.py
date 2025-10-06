@@ -472,10 +472,15 @@ def calculate_segmented_params_by_opponent_strength(df, team_id, league_id, seas
     
     for _, match in df.iterrows():
         try:
-            # Get opponent tier from match perspective
+            # Determine season from match timestamp, not from league's current season
+            # This handles cases where historical matches are analyzed but team isn't in current season
+            match_date = pd.to_datetime(match['date'])  # Column name is 'date', not 'date_GMT'
+            match_season = str(match_date.year)
+            
+            # Get opponent tier from match perspective using the match's actual season
             opponent_tier = get_opponent_tier_from_match(
                 match['home_team_id'], match['away_team_id'],
-                league_id, season
+                league_id, match_season, team_id
             )
             
             # Categorize match by opponent strength
@@ -1903,10 +1908,30 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             home_losses = data["response"]["fixtures"]["loses"]["home"] or 0
             away_losses = data["response"]["fixtures"]["loses"]["away"] or 0
 
-            # Calculate points
-            home_points = (home_wins * 3) + (home_draws * 1) + (home_losses * -1)
-            away_points = (away_wins * 4) + (away_draws * 2) + (away_losses * 0)
+            # Ansatz points system
+            home_win_points = 3
+            away_win_points = 4
+            home_draw_points = 1
+            away_draw_points = 2
+            home_loss_points = -1
+            away_loss_points = 0
+
+            # Calculate total points
+            home_points = (home_wins * home_win_points) + (home_draws * home_draw_points) + (home_losses * home_loss_points)
+            away_points = (away_wins * away_win_points) + (away_draws * away_draw_points) + (away_losses * away_loss_points)
             total_points = home_points + away_points
+
+            # Calculate maximum possible points (all wins)
+            home_games = home_wins + home_draws + home_losses
+            away_games = away_wins + away_draws + away_losses
+            home_max = home_games * home_win_points
+            away_max = away_games * away_win_points
+            max_points = home_max + away_max
+
+            # Calculate performance as percentage of maximum possible points
+            home_performance = home_points / home_max if home_max > 0 else 0
+            away_performance = away_points / away_max if away_max > 0 else 0
+            overall_performance = total_points / max_points if max_points > 0 else 0
 
             # Get goal stats
             goals_for_home = data["response"]["goals"]["for"]["total"]["home"] or 0
@@ -1930,9 +1955,9 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
                     'away_draws': away_draws,
                     'away_losses': away_losses,
                     'total_points': total_points,
-                    'home_performance': 0,
-                    'away_performance': 0,
-                    'performance': 0
+                    'home_performance': round(home_performance, 2),
+                    'away_performance': round(away_performance, 2),
+                    'performance': round(overall_performance, 2)
                 },
                 'team_logo': team_logo,
                 'team_goal_stats': {

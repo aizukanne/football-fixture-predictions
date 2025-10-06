@@ -40,20 +40,10 @@ echo ""
 echo -e "${YELLOW}[3/6] Creating lightweight requirements...${NC}"
 cat > requirements_light.txt << 'EOF'
 # Lightweight dependencies only
-# Heavy dependencies (numpy, pandas, scipy, scikit-learn) are in Lambda Layer
+# Heavy dependencies (numpy, pandas, scipy, scikit-learn, requests) are in Lambda Layer
+# boto3 and botocore are already included in Lambda Python runtime
 
-# AWS Services
-boto3>=1.20.0,<2.0.0
-botocore>=1.23.0,<2.0.0
-
-# API & HTTP
-requests>=2.26.0,<3.0.0
-
-# Date & Time
-python-dateutil>=2.8.2,<3.0.0
-
-# Utilities
-typing-extensions>=4.0.0
+# No additional dependencies needed - everything is in Lambda runtime or layer
 EOF
 echo -e "${GREEN}✅ Lightweight requirements created${NC}"
 echo ""

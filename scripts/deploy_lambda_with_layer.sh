@@ -211,8 +211,48 @@ aws lambda create-event-source-mapping \
 echo -e "${GREEN}✅ League Parameter Handler deployed${NC}"
 echo ""
 
+# Deploy Best Bets Handler
+echo -e "${YELLOW}[5/6] Deploying Best Bets Handler...${NC}"
+BEST_BETS_QUEUE_URL="https://sqs.${AWS_REGION}.amazonaws.com/${AWS_ACCOUNT_ID}/football_best-bets-analysis_${ENVIRONMENT}"
+
+aws lambda create-function \
+    --function-name "football-best-bets-handler-${ENVIRONMENT}" \
+    --runtime python3.13 \
+    --role "$IAM_ROLE_ARN" \
+    --handler src.handlers.best_bets_handler.lambda_handler \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --timeout 60 \
+    --memory-size 512 \
+    --layers "$LAMBDA_LAYER_ARN" \
+    --environment "Variables={ENVIRONMENT=${ENVIRONMENT},TABLE_PREFIX=football_,TABLE_SUFFIX=_${ENVIRONMENT}}" \
+    --region "$AWS_REGION" \
+    2>/dev/null || aws lambda update-function-code \
+    --function-name "football-best-bets-handler-${ENVIRONMENT}" \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --region "$AWS_REGION"
+
+aws lambda update-function-configuration \
+    --function-name "football-best-bets-handler-${ENVIRONMENT}" \
+    --runtime python3.13 \
+    --layers "$LAMBDA_LAYER_ARN" \
+    --region "$AWS_REGION" \
+    2>/dev/null || true
+
+# Add SQS trigger
+echo -e "${YELLOW}  Configuring SQS trigger...${NC}"
+BEST_BETS_QUEUE_ARN="arn:aws:sqs:${AWS_REGION}:${AWS_ACCOUNT_ID}:football_best-bets-analysis_${ENVIRONMENT}"
+aws lambda create-event-source-mapping \
+    --function-name "football-best-bets-handler-${ENVIRONMENT}" \
+    --event-source-arn "$BEST_BETS_QUEUE_ARN" \
+    --batch-size 10 \
+    --region "$AWS_REGION" \
+    2>/dev/null || echo "  (SQS trigger already exists)"
+
+echo -e "${GREEN}✅ Best Bets Handler deployed${NC}"
+echo ""
+
 # Deploy Team Parameter Handler
-echo -e "${YELLOW}[5/5] Deploying Team Parameter Handler...${NC}"
+echo -e "${YELLOW}[6/6] Deploying Team Parameter Handler...${NC}"
 aws lambda create-function \
     --function-name "football-team-parameter-handler-${ENVIRONMENT}" \
     --runtime python3.13 \
@@ -261,7 +301,8 @@ echo "  1. football-api-service-${ENVIRONMENT} (python3.13 + layer)"
 echo "  2. football-fixture-ingestion-${ENVIRONMENT} (python3.13 + layer)"
 echo "  3. football-prediction-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo "  4. football-league-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
-echo "  5. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
+echo "  5. football-best-bets-handler-${ENVIRONMENT} (python3.13 + layer)"
+echo "  6. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo ""
 
 echo -e "${YELLOW}Verify Deployment:${NC}"

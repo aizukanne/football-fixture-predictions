@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from ..data.api_client import _make_api_request
 from ..data.database_client import dynamodb
 from ..infrastructure.version_manager import VersionManager
-from ..utils.constants import MINIMUM_GAMES_THRESHOLD, API_FOOTBALL_BASE_URL
+from ..utils.constants import MINIMUM_GAMES_THRESHOLD, API_FOOTBALL_BASE_URL, _get_table_name
 
 
 class VenueAnalyzer:
@@ -30,7 +30,9 @@ class VenueAnalyzer:
     
     def __init__(self):
         try:
-            self.venue_cache_table = dynamodb.Table('venue_cache')
+            # Use _get_table_name to get environment-specific table name
+            venue_cache_table_name = _get_table_name('venue_cache')
+            self.venue_cache_table = dynamodb.Table(venue_cache_table_name) if dynamodb else None
         except Exception as e:
             print(f"Warning: Could not initialize venue_cache table: {e}")
             self.venue_cache_table = None
@@ -54,6 +56,21 @@ class VenueAnalyzer:
                 'climate_data': {'altitude': Decimal, 'typical_weather': str}
             }
         """
+        # Convert venue_id to int and validate (handles float/NaN from pandas)
+        try:
+            import math
+            if venue_id is None or (isinstance(venue_id, float) and math.isnan(venue_id)):
+                return {}
+            venue_id = int(venue_id)
+        except (ValueError, TypeError):
+            print(f"Invalid venue_id: {venue_id}")
+            return {}
+        
+        # Skip cache if table not available (IAM permission issue)
+        if not self.venue_cache_table:
+            venue_data = self._fetch_venue_from_api(venue_id)
+            return venue_data if venue_data else {}
+        
         # Check cache first
         try:
             response = self.venue_cache_table.get_item(Key={'venue_id': venue_id})
@@ -61,7 +78,8 @@ class VenueAnalyzer:
                 cached_item = response['Item']
                 # Check if cache is still valid (7 days TTL)
                 cached_at = datetime.fromisoformat(cached_item.get('cached_at', ''))
-                if datetime.now() - cached_at < timedelta(days=7):
+                # Make both datetimes timezone-naive for comparison
+                if datetime.now() - cached_at.replace(tzinfo=None) < timedelta(days=7):
                     return cached_item
         except Exception as e:
             print(f"Cache lookup failed for venue {venue_id}: {e}")
@@ -296,10 +314,10 @@ class VenueAnalyzer:
         
         # Normalize capacity (typical range 10k-80k)
         # Larger stadiums provide more atmosphere advantage
-        normalized = min(capacity / 80000, 1.0)
-        advantage = 1.0 + (normalized * 0.05)  # Up to 5% advantage for largest stadiums
+        normalized = Decimal(str(min(capacity / 80000, 1.0)))
+        advantage = Decimal('1.0') + (normalized * Decimal('0.05'))  # Up to 5% advantage for largest stadiums
         
-        return Decimal(str(advantage))
+        return advantage
     
     def _calculate_surface_advantage(self, team_id: int, surface: str, season: int) -> Decimal:
         """

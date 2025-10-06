@@ -259,21 +259,24 @@ def get_last_five_games(team_id, league_id, season, max_retries=DEFAULT_MAX_RETR
     return games
 
 
-def get_head_to_head(home_team_id, away_team_id, max_retries=DEFAULT_MAX_RETRIES):
+def get_head_to_head(home_team_id, away_team_id, league_id=None, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get head-to-head record between two teams.
+    Returns only the last 5 matches in the same competition if league_id is provided.
     
     Args:
         home_team_id: Home team identifier
         away_team_id: Away team identifier
+        league_id: League identifier to filter by (optional)
         max_retries: Maximum retry attempts
         
     Returns:
-        Head-to-head fixture data
+        Head-to-head fixture data (limited to last 5 matches in same competition if league_id provided)
     """
     url = f"{API_FOOTBALL_BASE_URL}/fixtures/headtohead"
     params = {
-        "h2h": f"{home_team_id}-{away_team_id}"
+        "h2h": f"{home_team_id}-{away_team_id}",
+        "last": 5  # Limit to last 5 matches
     }
     
     data = _make_api_request(url, params, max_retries=max_retries)
@@ -281,7 +284,14 @@ def get_head_to_head(home_team_id, away_team_id, max_retries=DEFAULT_MAX_RETRIES
     if not data or "response" not in data:
         return []
     
-    return data["response"]
+    fixtures = data["response"]
+    
+    # Filter by league if specified
+    if league_id:
+        fixtures = [f for f in fixtures if f.get('league', {}).get('id') == league_id]
+    
+    # Ensure we only return max 5 matches
+    return fixtures[:5]
 
 
 def get_injured_players(fixture_id, date, max_retries=DEFAULT_MAX_RETRIES):
@@ -616,6 +626,205 @@ class APIClient:
 
     def get_fixture_lineups(self, fixture_id, max_retries=DEFAULT_MAX_RETRIES):
         return get_fixture_lineups(fixture_id, max_retries)
+    
+    def get_team_recent_matches(self, team_id, league_id, season, limit=10, max_retries=DEFAULT_MAX_RETRIES):
+        """
+        Get recent matches for a team from the API.
+        
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year
+            limit: Maximum number of matches to return
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            List of match dictionaries with match data
+        """
+        url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+        params = {
+            "team": str(team_id),
+            "league": str(league_id),
+            "season": str(season),
+            "last": str(limit)
+        }
+        
+        data = _make_api_request(url, params, max_retries=max_retries)
+        
+        if not data or "response" not in data or not data["response"]:
+            return []
+        
+        matches = []
+        for fixture in data["response"]:
+            if fixture["fixture"]["status"]["short"] in ["FT", "AET", "PEN"]:  # Finished matches only
+                match_data = {
+                    "fixture_id": fixture["fixture"]["id"],
+                    "match_date": fixture["fixture"]["date"],
+                    "home_team_id": fixture["teams"]["home"]["id"],
+                    "away_team_id": fixture["teams"]["away"]["id"],
+                    "home_team": fixture["teams"]["home"]["name"],
+                    "away_team": fixture["teams"]["away"]["name"],
+                    "home_goals": fixture["goals"]["home"],
+                    "away_goals": fixture["goals"]["away"],
+                    "venue_id": fixture["fixture"].get("venue", {}).get("id"),
+                    "league_id": league_id,
+                    "season": season
+                }
+                matches.append(match_data)
+        
+        return matches
+    
+    def get_team_season_matches(self, team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
+        """
+        Get all matches for a team in a specific league and season.
+        
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            List of all match dictionaries for the season
+        """
+        url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+        params = {
+            "team": str(team_id),
+            "league": str(league_id),
+            "season": str(season)
+        }
+        
+        data = _make_api_request(url, params, max_retries=max_retries)
+        
+        if not data or "response" not in data or not data["response"]:
+            return []
+        
+        matches = []
+        for fixture in data["response"]:
+            if fixture["fixture"]["status"]["short"] in ["FT", "AET", "PEN"]:  # Finished matches only
+                match_data = {
+                    "fixture_id": fixture["fixture"]["id"],
+                    "match_date": fixture["fixture"]["date"],
+                    "home_team_id": fixture["teams"]["home"]["id"],
+                    "away_team_id": fixture["teams"]["away"]["id"],
+                    "home_team": fixture["teams"]["home"]["name"],
+                    "away_team": fixture["teams"]["away"]["name"],
+                    "home_goals": fixture["goals"]["home"],
+                    "away_goals": fixture["goals"]["away"],
+                    "venue_id": fixture["fixture"].get("venue", {}).get("id"),
+                    "league_id": league_id,
+                    "season": season
+                }
+                matches.append(match_data)
+        
+        return matches
+    
+    def get_team_injuries(self, team_id, season, max_retries=DEFAULT_MAX_RETRIES):
+        """
+        Get current injured players for a team.
+        
+        Args:
+            team_id: Team identifier
+            season: Season year
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            List of injured player dictionaries
+        """
+        url = f"{API_FOOTBALL_BASE_URL}/injuries"
+        params = {
+            "team": str(team_id),
+            "season": str(season)
+        }
+        
+        data = _make_api_request(url, params, max_retries=max_retries)
+        
+        if not data or "response" not in data or not data["response"]:
+            return []
+        
+        injuries = []
+        for injury_data in data["response"]:
+            injury = {
+                "player_id": injury_data.get("player", {}).get("id"),
+                "player_name": injury_data.get("player", {}).get("name"),
+                "injury_type": injury_data.get("player", {}).get("type"),
+                "injury_reason": injury_data.get("player", {}).get("reason"),
+                "status": "injured"
+            }
+            injuries.append(injury)
+        
+        return injuries
+    
+    def get_team_suspensions(self, team_id, season, max_retries=DEFAULT_MAX_RETRIES):
+        """
+        Get current suspended players for a team.
+        Note: API-Football may not have a dedicated suspensions endpoint,
+        so this returns empty list as a placeholder.
+        
+        Args:
+            team_id: Team identifier
+            season: Season year
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            List of suspended player dictionaries (currently empty)
+        """
+        # API-Football does not have a dedicated suspensions endpoint
+        # Suspensions are typically included in the injuries endpoint or fixture data
+        # Return empty list for now
+        return []
+    
+    def get_team_fixtures_in_period(self, team_id, league_id, season, start_date, end_date, max_retries=DEFAULT_MAX_RETRIES):
+        """
+        Get team fixtures within a specific date range.
+        
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year
+            start_date: Start date (datetime object)
+            end_date: End date (datetime object)
+            max_retries: Maximum retry attempts
+            
+        Returns:
+            List of fixture dictionaries within the date range
+        """
+        url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+        params = {
+            "team": str(team_id),
+            "league": str(league_id),
+            "season": str(season),
+            "from": start_date.strftime('%Y-%m-%d'),
+            "to": end_date.strftime('%Y-%m-%d')
+        }
+        
+        data = _make_api_request(url, params, max_retries=max_retries)
+        
+        if not data or "response" not in data or not data["response"]:
+            return []
+        
+        fixtures = []
+        for fixture in data["response"]:
+            fixture_data = {
+                "fixture_id": fixture["fixture"]["id"],
+                "match_date": fixture["fixture"]["date"],
+                "home_team_id": fixture["teams"]["home"]["id"],
+                "away_team_id": fixture["teams"]["away"]["id"],
+                "home_team": fixture["teams"]["home"]["name"],
+                "away_team": fixture["teams"]["away"]["name"],
+                "status": fixture["fixture"]["status"]["short"],
+                "league_id": league_id,
+                "season": season
+            }
+            
+            # Add goals if match is finished
+            if fixture["fixture"]["status"]["short"] in ["FT", "AET", "PEN"]:
+                fixture_data["home_goals"] = fixture["goals"]["home"]
+                fixture_data["away_goals"] = fixture["goals"]["away"]
+            
+            fixtures.append(fixture_data)
+        
+        return fixtures
 
 
 def get_football_match_scores(league_id, season, max_retries=DEFAULT_MAX_RETRIES):
@@ -665,6 +874,7 @@ def get_football_match_scores(league_id, season, max_retries=DEFAULT_MAX_RETRIES
                 'away_team_id': fixture['teams']['away']['id'],
                 'home_goals': fixture['score']['fulltime']['home'],
                 'away_goals': fixture['score']['fulltime']['away'],
+                'venue_id': fixture['fixture'].get('venue', {}).get('id'),
                 'league_id': league_id,
                 'season': season
             }

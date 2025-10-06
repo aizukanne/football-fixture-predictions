@@ -273,7 +273,7 @@ def process_fixtures(fixtures):
             home_team_stats['past_fixtures'] = get_last_five_games(home_team_id, league_id, season)
             away_team_stats['past_fixtures'] = get_last_five_games(away_team_id, league_id, season)
             
-            headtohead = get_head_to_head(home_team_id, away_team_id)
+            headtohead = get_head_to_head(home_team_id, away_team_id, league_id)
             home_team_stats['injuries'], away_team_stats['injuries'] = get_fixture_injuries(fixture_id, date[:10], home_team_id, away_team_id, season)
 
             # Create aggregated fixture data

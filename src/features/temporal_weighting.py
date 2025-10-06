@@ -390,14 +390,16 @@ def apply_momentum_weighting(matches: List[Dict], prediction_date: datetime) -> 
 # Helper Functions
 
 def parse_match_date(date_str: str) -> datetime:
-    """Parse match date string to datetime object."""
+    """Parse match date string to datetime object (returns timezone-naive datetime)."""
     try:
         if not date_str:
             return datetime.min
         
         # Handle various date formats
         if 'T' in date_str:
-            return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # Parse and convert to timezone-naive for consistent comparison
+            dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return dt.replace(tzinfo=None)  # Remove timezone info for consistency
         else:
             return datetime.strptime(date_str, '%Y-%m-%d')
             
