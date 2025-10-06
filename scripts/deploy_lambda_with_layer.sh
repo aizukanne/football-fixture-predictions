@@ -166,7 +166,7 @@ PREDICTION_QUEUE_ARN="arn:aws:sqs:${AWS_REGION}:${AWS_ACCOUNT_ID}:football_footb
 aws lambda create-event-source-mapping \
     --function-name "football-prediction-handler-${ENVIRONMENT}" \
     --event-source-arn "$PREDICTION_QUEUE_ARN" \
-    --batch-size 10 \
+    --batch-size 1 \
     --region "$AWS_REGION" \
     2>/dev/null || echo "  (SQS trigger already exists)"
 

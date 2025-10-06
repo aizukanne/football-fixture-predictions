@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from decimal import Decimal
 from datetime import datetime, timedelta
 import boto3
-import statistics
+from statistics import mean, stdev
 import math
 from collections import defaultdict, Counter
 import logging
@@ -640,7 +640,8 @@ class TacticalAnalyzer:
                 from ..data.api_client import get_fixtures_goals
 
                 # Get recent fixtures for goal pattern analysis
-                start_ts = int(datetime(season, 8, 1).timestamp())
+                season_year = int(season) if isinstance(season, str) else season
+                start_ts = int(datetime(season_year, 8, 1).timestamp())
                 end_ts = int(datetime.now().timestamp())
                 fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
 
@@ -821,9 +822,23 @@ class TacticalAnalyzer:
             from ..data.api_client import get_fixtures_goals
 
             # Get recent fixtures for the team
-            fixtures = get_fixtures_goals(league_id, season, team_id, last=limit)
+            season_year = int(season) if isinstance(season, str) else season
+            start_ts = int(datetime(season_year, 8, 1).timestamp())
+            end_ts = int(datetime.now().timestamp())
+            all_fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
 
-            if not fixtures or not isinstance(fixtures, list):
+            if not all_fixtures or not isinstance(all_fixtures, list):
+                logger.warning(f"No fixtures data for league {league_id}")
+                return {}
+
+            # Filter for this team and get last N fixtures
+            team_fixtures = [f for f in all_fixtures if
+                           f.get('teams', {}).get('home', {}).get('id') == team_id or
+                           f.get('teams', {}).get('away', {}).get('id') == team_id]
+
+            fixtures = team_fixtures[-limit:] if len(team_fixtures) > limit else team_fixtures
+
+            if not fixtures:
                 logger.warning(f"No fixtures data for team {team_id}")
                 return {}
 

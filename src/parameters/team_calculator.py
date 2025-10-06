@@ -108,18 +108,18 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
             version_metadata = version_manager.get_version_metadata()
             
             return {
-                'mu': league_params.get('mu', 1.35),
-                'mu_home': league_params.get('mu_home', 1.5),
-                'mu_away': league_params.get('mu_away', 1.2),
-                'p_score': league_params.get('p_score', 0.7),
-                'p_score_home': league_params.get('p_score_home', 0.75),
-                'p_score_away': league_params.get('p_score_away', 0.65),
-                'alpha': league_params.get('alpha', 0.1),
-                'alpha_home': league_params.get('alpha_home', 0.1),
-                'alpha_away': league_params.get('alpha_away', 0.1),
-                'home_adv': league_params.get('home_adv', 1.25),
-                'variance_home': league_params.get('variance_home', 1.0),
-                'variance_away': league_params.get('variance_away', 1.0),
+                'mu': float(league_params.get('mu', 1.35)),
+                'mu_home': float(league_params.get('mu_home', 1.5)),
+                'mu_away': float(league_params.get('mu_away', 1.2)),
+                'p_score': float(league_params.get('p_score', 0.7)),
+                'p_score_home': float(league_params.get('p_score_home', 0.75)),
+                'p_score_away': float(league_params.get('p_score_away', 0.65)),
+                'alpha': float(league_params.get('alpha', 0.1)),
+                'alpha_home': float(league_params.get('alpha_home', 0.1)),
+                'alpha_away': float(league_params.get('alpha_away', 0.1)),
+                'home_adv': float(league_params.get('home_adv', 1.25)),
+                'variance_home': float(league_params.get('variance_home', 1.0)),
+                'variance_away': float(league_params.get('variance_away', 1.0)),
                 # Phase 0 version tracking fields
                 'architecture_version': current_version,
                 'architecture_features': version_metadata['features'],
@@ -148,14 +148,15 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     g_away_against = away_matches['home_goals'] if not away_matches.empty else pd.Series([])
     
     # Initialize using league parameters if available, otherwise use reasonable defaults
+    # Convert all Decimal values to float to avoid type conflicts
     if league_params:
-        mu_home = league_params.get('mu_home', 1.5)
-        mu_away = league_params.get('mu_away', 1.2)
-        p_score_home = league_params.get('p_score_home', 0.75)
-        p_score_away = league_params.get('p_score_away', 0.65)
-        alpha_home = league_params.get('alpha_home', 0.1)
-        alpha_away = league_params.get('alpha_away', 0.1)
-        home_adv = league_params.get('home_adv', 1.25)
+        mu_home = float(league_params.get('mu_home', 1.5))
+        mu_away = float(league_params.get('mu_away', 1.2))
+        p_score_home = float(league_params.get('p_score_home', 0.75))
+        p_score_away = float(league_params.get('p_score_away', 0.65))
+        alpha_home = float(league_params.get('alpha_home', 0.1))
+        alpha_away = float(league_params.get('alpha_away', 0.1))
+        home_adv = float(league_params.get('home_adv', 1.25))
     else:
         mu_home = 1.5
         mu_away = 1.2
@@ -216,9 +217,9 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
             alpha_nb = ((alpha_home * home_weight if using_team_home else 0) + 
                         (alpha_away * away_weight if using_team_away else 0)) / weights_sum
         else:
-            alpha_nb = league_params.get('alpha', 0.1) if league_params else 0.1
+            alpha_nb = float(league_params.get('alpha', 0.1)) if league_params else 0.1
     else:
-        alpha_nb = league_params.get('alpha', 0.1) if league_params else 0.1
+        alpha_nb = float(league_params.get('alpha', 0.1)) if league_params else 0.1
     
     # Get version tracking metadata
     version_manager = VersionManager()
@@ -580,14 +581,15 @@ def calculate_segment_parameters(df_segment, team_id, league_params, segment_nam
     g_away_against = away_matches['home_goals'] if not away_matches.empty else pd.Series([])
     
     # Initialize with league parameters if available
+    # Convert all Decimal values to float to avoid type conflicts
     if league_params:
-        mu_home = league_params.get('mu_home', 1.5)
-        mu_away = league_params.get('mu_away', 1.2)
-        p_score_home = league_params.get('p_score_home', 0.75)
-        p_score_away = league_params.get('p_score_away', 0.65)
-        alpha_home = league_params.get('alpha_home', 0.1)
-        alpha_away = league_params.get('alpha_away', 0.1)
-        home_adv = league_params.get('home_adv', 1.25)
+        mu_home = float(league_params.get('mu_home', 1.5))
+        mu_away = float(league_params.get('mu_away', 1.2))
+        p_score_home = float(league_params.get('p_score_home', 0.75))
+        p_score_away = float(league_params.get('p_score_away', 0.65))
+        alpha_home = float(league_params.get('alpha_home', 0.1))
+        alpha_away = float(league_params.get('alpha_away', 0.1))
+        home_adv = float(league_params.get('home_adv', 1.25))
     else:
         mu_home = 1.5
         mu_away = 1.2
@@ -624,9 +626,10 @@ def calculate_segment_parameters(df_segment, team_id, league_params, segment_nam
     if total_matches > 0:
         home_weight = len(g_home) / total_matches
         away_weight = len(g_away) / total_matches
-        
-        mu = (mu_home * home_weight + mu_away * away_weight)
-        p_score = (p_score_home * home_weight + p_score_away * away_weight)
+
+        # Convert to float to handle Decimal * float operations
+        mu = float(mu_home) * home_weight + float(mu_away) * away_weight
+        p_score = float(p_score_home) * home_weight + float(p_score_away) * away_weight
         
         # Weighted alpha calculation
         if using_segment_home or using_segment_away:
@@ -635,9 +638,9 @@ def calculate_segment_parameters(df_segment, team_id, league_params, segment_nam
                 alpha_nb = ((alpha_home * home_weight if using_segment_home else 0) +
                            (alpha_away * away_weight if using_segment_away else 0)) / weights_sum
             else:
-                alpha_nb = league_params.get('alpha', 0.1) if league_params else 0.1
+                alpha_nb = float(league_params.get('alpha', 0.1)) if league_params else 0.1
         else:
-            alpha_nb = league_params.get('alpha', 0.1) if league_params else 0.1
+            alpha_nb = float(league_params.get('alpha', 0.1)) if league_params else 0.1
     else:
         mu = (mu_home + mu_away) / 2
         p_score = (p_score_home + p_score_away) / 2
@@ -698,18 +701,18 @@ def get_fallback_segment_params(league_params, segment_name):
     
     if league_params:
         base_params = {
-            'mu': league_params.get('mu', 1.35),
-            'mu_home': league_params.get('mu_home', 1.5),
-            'mu_away': league_params.get('mu_away', 1.2),
-            'p_score': league_params.get('p_score', 0.7),
-            'p_score_home': league_params.get('p_score_home', 0.75),
-            'p_score_away': league_params.get('p_score_away', 0.65),
-            'alpha': league_params.get('alpha', 0.1),
-            'alpha_home': league_params.get('alpha_home', 0.1),
-            'alpha_away': league_params.get('alpha_away', 0.1),
-            'home_adv': league_params.get('home_adv', 1.25),
-            'variance_home': league_params.get('variance_home', 1.65),
-            'variance_away': league_params.get('variance_away', 1.3)
+            'mu': float(league_params.get('mu', 1.35)),
+            'mu_home': float(league_params.get('mu_home', 1.5)),
+            'mu_away': float(league_params.get('mu_away', 1.2)),
+            'p_score': float(league_params.get('p_score', 0.7)),
+            'p_score_home': float(league_params.get('p_score_home', 0.75)),
+            'p_score_away': float(league_params.get('p_score_away', 0.65)),
+            'alpha': float(league_params.get('alpha', 0.1)),
+            'alpha_home': float(league_params.get('alpha_home', 0.1)),
+            'alpha_away': float(league_params.get('alpha_away', 0.1)),
+            'home_adv': float(league_params.get('home_adv', 1.25)),
+            'variance_home': float(league_params.get('variance_home', 1.65)),
+            'variance_away': float(league_params.get('variance_away', 1.3))
         }
     else:
         base_params = {
