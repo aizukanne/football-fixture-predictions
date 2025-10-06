@@ -13,12 +13,14 @@ from ..utils.constants import DEFAULT_ALPHA, MAX_GOALS_ANALYSIS
 def nb_pmf(k, mu, alpha=DEFAULT_ALPHA):
     """
     Calculate probability mass function for Negative Binomial distribution.
-    
+    Automatically uses Poisson for underdispersed data (alpha near 0).
+
     Args:
         k: Number of goals
         mu: Lambda (expected goals)
         alpha: Dispersion parameter (higher = more dispersion)
-    
+               When alpha ≤ 0.01, uses Poisson distribution for statistical accuracy
+
     Returns:
         Probability of exactly k goals with expected value mu
     """
@@ -26,11 +28,7 @@ def nb_pmf(k, mu, alpha=DEFAULT_ALPHA):
         # Ensure parameters are valid
         if mu < 0:
             return 0
-        
-        # Use scipy's implementation for numerical stability
-        r = 1 / alpha
-        p = 1 / (1 + alpha * mu)
-        
+
         # Handle edge cases
         if k < 0:
             return 0
@@ -38,7 +36,19 @@ def nb_pmf(k, mu, alpha=DEFAULT_ALPHA):
             return 1
         if mu == 0:
             return 0
-            
+
+        # Adaptive distribution selection for maximum accuracy:
+        # When alpha is very small (≤ 0.01), the data shows little to no overdispersion,
+        # meaning variance ≈ mean. In this case, Poisson is statistically more appropriate
+        # and numerically more stable than forcing Negative Binomial with tiny alpha.
+        if alpha <= 0.01:
+            # Use Poisson for underdispersed or equidispersed data (variance ≈ mean)
+            return poisson_pmf(k, mu)
+
+        # Use Negative Binomial for overdispersed data (variance > mean, alpha > 0.01)
+        r = 1 / alpha
+        p = 1 / (1 + alpha * mu)
+
         return stats.nbinom.pmf(k, r, p)
     except Exception as e:
         # Fallback to Poisson in case of numerical errors

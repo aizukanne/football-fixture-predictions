@@ -124,7 +124,10 @@ class TacticalAnalyzer:
             
             return {
                 'primary_formation': primary_formation,
+                'most_used_formation': primary_formation,  # Alias for backward compatibility
                 'formation_frequency': formation_frequency,
+                'formations_count': len(formation_counts),  # Number of different formations used
+                'formation_consistency': tactical_consistency,  # Alias for backward compatibility
                 'home_formation': home_formation,
                 'away_formation': away_formation,
                 'vs_strong_formation': vs_strong_formation,
@@ -523,67 +526,344 @@ class TacticalAnalyzer:
     # Private helper methods
     
     def _get_team_matches_with_formations(self, team_id: int, league_id: int, season: int) -> List[Dict]:
-        """Get team matches with formation data."""
+        """Get team matches with formation data from API."""
         try:
-            # This would integrate with the API client to get formation data
-            # For now, return simulated data structure
+            from ..data.api_client import get_team_statistics
+
+            # Get team statistics which includes lineup/formation data
+            team_stats = get_team_statistics(league_id, season, team_id)
+
+            if not team_stats or 'response' not in team_stats:
+                logger.warning(f"No team statistics for formation analysis: team {team_id}")
+                return []
+
+            response = team_stats['response']
+            lineups = response.get('lineups', [])
+
+            if not lineups:
+                logger.warning(f"No lineup data available for team {team_id}")
+                return []
+
+            # Extract formation information
+            # API provides aggregated data, not per-match, so we simulate match list
+            # based on formation frequencies
             matches = []
-            # Implementation would fetch real formation data from API-Football
+
+            for lineup in lineups:
+                formation = lineup.get('formation')
+                played = lineup.get('played', 0)
+
+                if not formation or played == 0:
+                    continue
+
+                # Create simulated match entries based on how many times formation was used
+                # In reality, would need to fetch individual fixtures to get true match-by-match data
+                for i in range(played):
+                    matches.append({
+                        'formation': formation,
+                        'is_home': i % 2 == 0,  # Alternate home/away (estimation)
+                        'opponent_id': None,     # Would need real fixture data
+                        'formation_changes': 0   # Would need event data
+                    })
+
             return matches
+
         except Exception as e:
             logger.error(f"Error fetching team matches with formations: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def _get_team_tactical_stats(self, team_id: int, league_id: int, season: int) -> Dict:
-        """Get comprehensive tactical statistics for a team."""
+        """Get comprehensive tactical statistics for a team from API."""
         try:
-            # This would integrate with the API client to get detailed stats
-            # For now, return simulated structure
+            from ..data.api_client import get_team_statistics, get_fixtures_goals
+
+            # Get team statistics from API-Football
+            team_stats = get_team_statistics(league_id, season, team_id)
+
+            if not team_stats or 'response' not in team_stats:
+                logger.warning(f"No team statistics available for team {team_id}")
+                return {}
+
+            response = team_stats['response']
+
+            # Extract basic statistics
+            fixtures = response.get('fixtures', {})
+            goals = response.get('goals', {})
+            cards = response.get('cards', {})
+            clean_sheet = response.get('clean_sheet', {})
+
+            # Calculate games played
+            total_games = fixtures.get('played', {}).get('total', 0)
+            if total_games == 0:
+                logger.warning(f"Team {team_id} has no games played")
+                return {}
+
+            # Calculate clean sheets ratio
+            clean_sheets_home = clean_sheet.get('home', 0) or 0
+            clean_sheets_away = clean_sheet.get('away', 0) or 0
+            clean_sheets_total = clean_sheets_home + clean_sheets_away
+            clean_sheets_ratio = clean_sheets_total / total_games if total_games > 0 else 0
+
+            # Calculate goals conceded per game
+            goals_conceded_home = goals.get('against', {}).get('total', {}).get('home', 0) or 0
+            goals_conceded_away = goals.get('against', {}).get('total', {}).get('away', 0) or 0
+            goals_conceded_total = goals_conceded_home + goals_conceded_away
+            goals_conceded_per_game = goals_conceded_total / total_games if total_games > 0 else 0
+
+            # Calculate cards per game
+            yellow_total = 0
+            red_total = 0
+
+            if cards:
+                for time_period, card_data in cards.get('yellow', {}).items():
+                    if time_period != 'total' and isinstance(card_data, dict):
+                        yellow_total += card_data.get('total', 0) or 0
+
+                for time_period, card_data in cards.get('red', {}).items():
+                    if time_period != 'total' and isinstance(card_data, dict):
+                        red_total += card_data.get('total', 0) or 0
+
+            yellow_cards_per_game = yellow_total / total_games if total_games > 0 else 0
+            red_cards_per_game = red_total / total_games if total_games > 0 else 0
+
+            # Get match-level statistics (last 10 games for tactical analysis)
+            try:
+                match_stats = self._aggregate_match_statistics(team_id, league_id, season, limit=10)
+            except Exception as e:
+                logger.warning(f"Could not aggregate match statistics: {e}")
+                match_stats = {}
+
+            # Combine API data with match aggregations
             return {
-                'possession_percentage': 55,
-                'pass_accuracy': 82,
-                'short_passes_ratio': 0.75,
-                'shots_per_game': 12,
-                'corners_per_game': 6,
-                'attacks_per_game': 120,
-                'clean_sheets_ratio': 0.3,
-                'goals_conceded_per_game': 1.2,
-                'blocks_per_game': 18,
-                'clearances_per_game': 25,
-                'tackles_per_game': 16,
-                'interceptions_per_game': 12,
-                'fouls_per_game': 14,
-                'counter_attack_goals_ratio': 0.18,
-                'fast_break_attempts_per_game': 4,
-                'avg_transition_time': 8,
-                'set_piece_goals_ratio': 0.25,
-                'corner_conversion_rate': 0.08,
-                'free_kick_accuracy': 0.12,
-                'aerial_duels_won_ratio': 0.6,
-                'yellow_cards_per_game': 2.5,
-                'red_cards_per_game': 0.08,
-                'performance_variance': 0.25,
-                'formation_consistency': 0.8
+                # From team statistics endpoint
+                'clean_sheets_ratio': clean_sheets_ratio,
+                'goals_conceded_per_game': goals_conceded_per_game,
+                'yellow_cards_per_game': yellow_cards_per_game,
+                'red_cards_per_game': red_cards_per_game,
+
+                # From match-level aggregations
+                'possession_percentage': match_stats.get('avg_possession', 50),
+                'pass_accuracy': match_stats.get('avg_pass_accuracy', 75),
+                'short_passes_ratio': match_stats.get('short_passes_ratio', 0.7),
+                'shots_per_game': match_stats.get('avg_shots', 10),
+                'corners_per_game': match_stats.get('avg_corners', 5),
+                'attacks_per_game': match_stats.get('avg_attacks', 100),
+                'blocks_per_game': match_stats.get('avg_blocks', 15),
+                'clearances_per_game': match_stats.get('avg_clearances', 20),
+                'tackles_per_game': match_stats.get('avg_tackles', 15),
+                'interceptions_per_game': match_stats.get('avg_interceptions', 10),
+                'fouls_per_game': match_stats.get('avg_fouls', 12),
+
+                # Derived/estimated metrics (would need more sophisticated analysis)
+                'counter_attack_goals_ratio': 0.15,  # Placeholder - needs xG analysis
+                'fast_break_attempts_per_game': 3,    # Placeholder - needs event data
+                'avg_transition_time': 10,            # Placeholder - needs event data
+                'set_piece_goals_ratio': 0.2,         # Placeholder - needs goal type data
+                'corner_conversion_rate': match_stats.get('corner_conversion', 0.05),
+                'free_kick_accuracy': 0.1,            # Placeholder - needs set piece data
+                'aerial_duels_won_ratio': 0.5,        # Placeholder - needs duel data
+                'performance_variance': match_stats.get('performance_variance', 0.3),
+                'formation_consistency': match_stats.get('formation_consistency', 0.7)
             }
+
         except Exception as e:
-            logger.error(f"Error fetching team tactical stats: {e}")
+            logger.error(f"Error fetching team tactical stats for team {team_id}: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
-    
+
+    def _aggregate_match_statistics(self, team_id: int, league_id: int, season: int, limit: int = 10) -> Dict:
+        """
+        Aggregate match-level statistics from recent games.
+
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year
+            limit: Number of recent matches to analyze
+
+        Returns:
+            Dictionary with aggregated match statistics
+        """
+        try:
+            from ..data.api_client import get_fixtures_goals
+
+            # Get recent fixtures for the team
+            fixtures = get_fixtures_goals(league_id, season, team_id, last=limit)
+
+            if not fixtures or not isinstance(fixtures, list):
+                logger.warning(f"No fixtures data for team {team_id}")
+                return {}
+
+            # Initialize accumulators
+            total_possession = []
+            total_shots = []
+            total_corners = []
+            total_fouls = []
+            total_passes = []
+            total_pass_accuracy = []
+
+            # Process each fixture
+            for fixture in fixtures:
+                if not isinstance(fixture, dict):
+                    continue
+
+                fixture_id = fixture.get('fixture', {}).get('id')
+                if not fixture_id:
+                    continue
+
+                # Determine if team was home or away
+                teams = fixture.get('teams', {})
+                home_team_id = teams.get('home', {}).get('id')
+                away_team_id = teams.get('away', {}).get('id')
+
+                is_home = (home_team_id == team_id)
+                team_index = 0 if is_home else 1
+
+                # Extract statistics if available
+                # Note: fixture statistics would need separate API call per fixture
+                # For now, we'll use estimated values based on goals/results
+                # A full implementation would call get_fixture_statistics(fixture_id)
+
+                goals_data = fixture.get('goals', {})
+                if is_home:
+                    team_goals = goals_data.get('home', 0)
+                    opp_goals = goals_data.get('away', 0)
+                else:
+                    team_goals = goals_data.get('away', 0)
+                    opp_goals = goals_data.get('home', 0)
+
+                # Estimate tactical metrics from goals (rough approximation)
+                # In a full implementation, would fetch real stats per fixture
+                if team_goals > opp_goals:  # Won
+                    total_possession.append(55 + (team_goals - opp_goals) * 5)
+                    total_shots.append(12 + team_goals * 2)
+                    total_pass_accuracy.append(80 + team_goals * 2)
+                elif team_goals == opp_goals:  # Draw
+                    total_possession.append(50)
+                    total_shots.append(10)
+                    total_pass_accuracy.append(75)
+                else:  # Lost
+                    total_possession.append(45 - (opp_goals - team_goals) * 3)
+                    total_shots.append(8)
+                    total_pass_accuracy.append(70)
+
+                # Corners and fouls estimation
+                total_corners.append(5 + team_goals)
+                total_fouls.append(12)
+
+            # Calculate averages
+            num_matches = len(total_possession) if total_possession else 1
+
+            return {
+                'avg_possession': sum(total_possession) / num_matches if total_possession else 50,
+                'avg_shots': sum(total_shots) / num_matches if total_shots else 10,
+                'avg_corners': sum(total_corners) / num_matches if total_corners else 5,
+                'avg_fouls': sum(total_fouls) / num_matches if total_fouls else 12,
+                'avg_pass_accuracy': sum(total_pass_accuracy) / num_matches if total_pass_accuracy else 75,
+                'short_passes_ratio': 0.7,  # Would need detailed pass data
+                'avg_attacks': 100,  # Would need attack data
+                'avg_blocks': 15,    # Would need defensive action data
+                'avg_clearances': 20,  # Would need defensive action data
+                'avg_tackles': 15,  # Would need defensive action data
+                'avg_interceptions': 10,  # Would need defensive action data
+                'corner_conversion': 0.05,  # Would need set piece data
+                'performance_variance': 0.3,  # Would need variance calculation
+                'formation_consistency': 0.7  # Would need formation data
+            }
+
+        except Exception as e:
+            logger.error(f"Error aggregating match statistics: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
     def _get_league_averages(self, league_id: int, season: int) -> Dict:
         """Get league-wide average statistics for normalization."""
         try:
-            # This would calculate league averages from all teams
+            from ..data.api_client import get_league_teams, get_team_statistics
+
+            # Get all teams in the league
+            teams_data = get_league_teams(league_id, season)
+
+            if not teams_data or 'response' not in teams_data:
+                logger.warning(f"No league teams data for league {league_id}")
+                return self._get_default_league_averages()
+
+            teams = teams_data['response']
+            if not teams:
+                return self._get_default_league_averages()
+
+            # Collect statistics from all teams
+            all_goals_conceded = []
+            all_clean_sheets = []
+            total_games_league = 0
+
+            for team_data in teams[:20]:  # Limit to first 20 teams to reduce API calls
+                team_id = team_data.get('team', {}).get('id')
+                if not team_id:
+                    continue
+
+                try:
+                    team_stats = get_team_statistics(league_id, season, team_id)
+                    if not team_stats or 'response' not in team_stats:
+                        continue
+
+                    response = team_stats['response']
+                    fixtures = response.get('fixtures', {})
+                    goals = response.get('goals', {})
+
+                    total_games = fixtures.get('played', {}).get('total', 0)
+                    if total_games > 0:
+                        total_games_league += total_games
+
+                        # Goals conceded
+                        goals_conceded = (goals.get('against', {}).get('total', {}).get('total', 0) or 0)
+                        all_goals_conceded.append(goals_conceded / total_games)
+
+                        # Clean sheets
+                        clean_sheets = (response.get('clean_sheet', {}).get('total', 0) or 0)
+                        all_clean_sheets.append(clean_sheets / total_games)
+
+                except Exception as e:
+                    logger.warning(f"Error getting stats for team {team_id}: {e}")
+                    continue
+
+            # Calculate league averages
+            if all_goals_conceded:
+                avg_goals_conceded = sum(all_goals_conceded) / len(all_goals_conceded)
+            else:
+                avg_goals_conceded = 1.4
+
+            # Estimate other metrics based on typical football statistics
+            # In a full implementation, would aggregate from all match statistics
             return {
-                'avg_shots_per_game': 13,
-                'avg_corners_per_game': 6.5,
-                'avg_attacks_per_game': 115,
-                'avg_goals_conceded': 1.4,
-                'avg_tackles_per_game': 17,
-                'avg_interceptions_per_game': 13
+                'avg_shots_per_game': 13,  # Would need match-level data
+                'avg_corners_per_game': 6.5,  # Would need match-level data
+                'avg_attacks_per_game': 115,  # Would need match-level data
+                'avg_goals_conceded': avg_goals_conceded,
+                'avg_tackles_per_game': 17,  # Would need match-level data
+                'avg_interceptions_per_game': 13  # Would need match-level data
             }
+
         except Exception as e:
             logger.error(f"Error fetching league averages: {e}")
-            return {}
+            import traceback
+            traceback.print_exc()
+            return self._get_default_league_averages()
+
+    def _get_default_league_averages(self) -> Dict:
+        """Get default league average statistics."""
+        return {
+            'avg_shots_per_game': 13,
+            'avg_corners_per_game': 6.5,
+            'avg_attacks_per_game': 115,
+            'avg_goals_conceded': 1.4,
+            'avg_tackles_per_game': 17,
+            'avg_interceptions_per_game': 13
+        }
     
     def _get_team_detailed_stats(self, team_id: int, league_id: int, season: int) -> List[Dict]:
         """Get detailed match statistics for playing pattern analysis."""
