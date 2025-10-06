@@ -543,6 +543,61 @@ class DatabaseClient:
         return health_check()
 
 
+def get_cached_fixture_events(fixture_id):
+    """
+    Get fixture events from cache or fetch from API if not cached.
+    Cache for 7 days for completed fixtures.
+
+    Args:
+        fixture_id: Fixture identifier
+
+    Returns:
+        Fixture events data from cache or API
+    """
+    try:
+        from .api_client import get_fixture_events
+
+        # Try to get from cache first
+        cache_table_name = 'fixture_events_cache'
+
+        if dynamodb:
+            try:
+                cache_table = dynamodb.Table(cache_table_name)
+                response = cache_table.get_item(Key={'fixture_id': str(fixture_id)})
+
+                if 'Item' in response:
+                    print(f"Cache hit for fixture {fixture_id}")
+                    return response['Item'].get('events')
+            except Exception as e:
+                print(f"Cache table not available: {e}, fetching from API")
+
+        # Fetch from API if not in cache
+        print(f"Fetching events from API for fixture {fixture_id}")
+        events = get_fixture_events(fixture_id)
+
+        # Cache the result for 7 days
+        if dynamodb and events:
+            try:
+                cache_table = dynamodb.Table(cache_table_name)
+                ttl = int((datetime.now() + timedelta(days=7)).timestamp())
+
+                cache_table.put_item(Item={
+                    'fixture_id': str(fixture_id),
+                    'events': events,
+                    'ttl': ttl,
+                    'cached_at': int(datetime.now().timestamp())
+                })
+                print(f"Cached events for fixture {fixture_id}")
+            except Exception as e:
+                print(f"Failed to cache events: {e}")
+
+        return events
+
+    except Exception as e:
+        print(f"Error in get_cached_fixture_events: {e}")
+        return None
+
+
 # Convenience function to get DynamoDB table directly (for compatibility)
 def get_dynamodb_table(table_name=None):
     """

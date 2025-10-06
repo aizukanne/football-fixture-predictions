@@ -635,7 +635,32 @@ class TacticalAnalyzer:
                 logger.warning(f"Could not aggregate match statistics: {e}")
                 match_stats = {}
 
-            # Combine API data with match aggregations
+            # Get goal pattern analysis from events
+            try:
+                from ..data.api_client import get_fixtures_goals
+
+                # Get recent fixtures for goal pattern analysis
+                start_ts = int(datetime(season, 8, 1).timestamp())
+                end_ts = int(datetime.now().timestamp())
+                fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
+
+                # Filter for this team and get last 10
+                team_fixtures = [f for f in fixtures if
+                                 f.get('teams', {}).get('home', {}).get('id') == team_id or
+                                 f.get('teams', {}).get('away', {}).get('id') == team_id][-10:]
+
+                goal_patterns = self._analyze_goal_patterns(team_id, team_fixtures, limit=10)
+            except Exception as e:
+                logger.warning(f"Could not analyze goal patterns: {e}")
+                goal_patterns = {}
+
+            # Estimate set piece goals from penalties + corners
+            penalty_ratio = goal_patterns.get('penalty_ratio', 0)
+            corners_per_game = match_stats.get('avg_corners', 5)
+            estimated_corner_goals_ratio = (corners_per_game * 0.10) / (corners_per_game + 1)  # 10% corner conversion
+            set_piece_estimate = min(penalty_ratio + estimated_corner_goals_ratio, 0.4)  # Cap at 40%
+
+            # Combine API data with match aggregations and goal patterns
             return {
                 # From team statistics endpoint
                 'clean_sheets_ratio': clean_sheets_ratio,
@@ -648,7 +673,7 @@ class TacticalAnalyzer:
                 'pass_accuracy': match_stats.get('avg_pass_accuracy', 75),
                 'short_passes_ratio': match_stats.get('short_passes_ratio', 0.7),
                 'shots_per_game': match_stats.get('avg_shots', 10),
-                'corners_per_game': match_stats.get('avg_corners', 5),
+                'corners_per_game': corners_per_game,
                 'attacks_per_game': match_stats.get('avg_attacks', 100),
                 'blocks_per_game': match_stats.get('avg_blocks', 15),
                 'clearances_per_game': match_stats.get('avg_clearances', 20),
@@ -656,16 +681,27 @@ class TacticalAnalyzer:
                 'interceptions_per_game': match_stats.get('avg_interceptions', 10),
                 'fouls_per_game': match_stats.get('avg_fouls', 12),
 
-                # Derived/estimated metrics (would need more sophisticated analysis)
+                # From goal pattern analysis (REAL DATA)
+                'penalty_ratio': goal_patterns.get('penalty_ratio', 0),
+                'late_goal_scoring_ability': goal_patterns.get('late_goal_ratio', 0),
+                'first_half_dominance': goal_patterns.get('first_half_goal_ratio', 0),
+                'team_play_index': goal_patterns.get('team_play_ratio', 0),  # Creativity indicator
+
+                # Estimated metrics
+                'set_piece_goals_ratio': set_piece_estimate,
                 'counter_attack_goals_ratio': 0.15,  # Placeholder - needs xG analysis
                 'fast_break_attempts_per_game': 3,    # Placeholder - needs event data
                 'avg_transition_time': 10,            # Placeholder - needs event data
-                'set_piece_goals_ratio': 0.2,         # Placeholder - needs goal type data
                 'corner_conversion_rate': match_stats.get('corner_conversion', 0.05),
                 'free_kick_accuracy': 0.1,            # Placeholder - needs set piece data
                 'aerial_duels_won_ratio': 0.5,        # Placeholder - needs duel data
                 'performance_variance': match_stats.get('performance_variance', 0.3),
-                'formation_consistency': match_stats.get('formation_consistency', 0.7)
+                'formation_consistency': match_stats.get('formation_consistency', 0.7),
+
+                # Metadata
+                'goal_analysis_source': 'fixture_events_api',
+                'goals_analyzed': goal_patterns.get('total_goals_analyzed', 0),
+                'fixtures_analyzed': goal_patterns.get('fixtures_analyzed', 0)
             }
 
         except Exception as e:
@@ -673,6 +709,100 @@ class TacticalAnalyzer:
             import traceback
             traceback.print_exc()
             return {}
+
+    def _analyze_goal_patterns(self, team_id: int, fixtures: list, limit: int = 10) -> Dict:
+        """
+        Analyze goal scoring patterns from fixture events.
+
+        Args:
+            team_id: Team identifier
+            fixtures: List of fixture dictionaries
+            limit: Maximum number of fixtures to analyze
+
+        Returns:
+            Dictionary with goal pattern metrics
+        """
+        try:
+            from ..data.database_client import get_cached_fixture_events
+
+            total_goals = 0
+            penalty_goals = 0
+            own_goals_conceded = 0
+            late_goals = 0  # After 75 min
+            first_half_goals = 0  # Before 45 min
+            goals_with_assists = 0
+
+            fixtures_to_analyze = fixtures[:limit] if len(fixtures) > limit else fixtures
+
+            for fixture in fixtures_to_analyze:
+                if not isinstance(fixture, dict):
+                    continue
+
+                fixture_id = fixture.get('fixture', {}).get('id')
+                if not fixture_id:
+                    continue
+
+                # Get events for this fixture
+                events_data = get_cached_fixture_events(fixture_id)
+
+                if not events_data or 'response' not in events_data:
+                    continue
+
+                # Analyze goal events
+                for event in events_data['response']:
+                    if event.get('type') != 'Goal':
+                        continue
+
+                    event_team_id = event.get('team', {}).get('id')
+
+                    # Goals scored by our team
+                    if event_team_id == team_id:
+                        total_goals += 1
+
+                        # Check goal type
+                        detail = event.get('detail', '')
+                        if detail == 'Penalty':
+                            penalty_goals += 1
+
+                        # Check timing
+                        elapsed = event.get('time', {}).get('elapsed', 0)
+                        if elapsed >= 75:
+                            late_goals += 1
+                        elif elapsed <= 45:
+                            first_half_goals += 1
+
+                        # Check for assist
+                        if event.get('assist', {}).get('id'):
+                            goals_with_assists += 1
+
+                    # Own goals conceded
+                    elif detail == 'Own Goal':
+                        own_goals_conceded += 1
+
+            # Calculate ratios
+            return {
+                'total_goals_analyzed': total_goals,
+                'penalty_ratio': penalty_goals / total_goals if total_goals > 0 else 0,
+                'late_goal_ratio': late_goals / total_goals if total_goals > 0 else 0,
+                'first_half_goal_ratio': first_half_goals / total_goals if total_goals > 0 else 0,
+                'team_play_ratio': goals_with_assists / total_goals if total_goals > 0 else 0,
+                'own_goals_conceded': own_goals_conceded,
+                'fixtures_analyzed': len(fixtures_to_analyze)
+            }
+
+        except Exception as e:
+            logger.error(f"Error analyzing goal patterns: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'total_goals_analyzed': 0,
+                'penalty_ratio': 0,
+                'late_goal_ratio': 0,
+                'first_half_goal_ratio': 0,
+                'team_play_ratio': 0,
+                'own_goals_conceded': 0,
+                'fixtures_analyzed': 0
+            }
 
     def _aggregate_match_statistics(self, team_id: int, league_id: int, season: int, limit: int = 10) -> Dict:
         """

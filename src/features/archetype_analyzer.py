@@ -15,16 +15,7 @@ from collections import defaultdict, Counter
 # Import existing infrastructure
 from ..infrastructure.version_manager import VersionManager
 from ..data.database_client import get_team_params_from_db, get_league_params_from_db
-from .team_classifier import classify_team_archetype, get_team_performance_profile
-
-# Simple wrapper class for compatibility
-class DatabaseClient:
-    def get_team_matches(self, team_id, league_id, season):
-        return []
-    def get_league_teams(self, league_id, season):
-        return [{'team_id': i} for i in range(1, 21)]
-    def get_league_matches(self, league_id, season):
-        return []
+from .team_classifier import classify_team_archetype, get_team_performance_profile, DatabaseClient
 
 logger = logging.getLogger(__name__)
 

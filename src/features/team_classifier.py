@@ -17,19 +17,190 @@ import math
 from ..infrastructure.version_manager import VersionManager
 from ..data.database_client import get_team_params_from_db, get_league_params_from_db
 
-# Simple wrapper class for compatibility
+# Database client for fetching match data
 class DatabaseClient:
     def get_team_matches(self, team_id, league_id, season):
-        # Mock implementation - would query actual match data
-        return []
-    
+        """
+        Get all matches for a specific team in a league and season.
+
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year
+
+        Returns:
+            List of match dictionaries with structure:
+            [
+                {
+                    'match_id': int,
+                    'home_team_id': int,
+                    'away_team_id': int,
+                    'home_goals': int,
+                    'away_goals': int,
+                    'match_date': str (ISO format)
+                },
+                ...
+            ]
+        """
+        try:
+            from ..data.api_client import get_fixtures_goals
+            from ..data.api_client import get_league_start_date
+
+            # Get season date range
+            try:
+                start_date = get_league_start_date(league_id)
+                if start_date:
+                    start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp())
+                else:
+                    # Fallback: assume season starts August 1st
+                    start_ts = int(datetime(season, 8, 1).timestamp())
+            except Exception as e:
+                logger.warning(f"Could not get league start date: {e}, using default")
+                start_ts = int(datetime(season, 8, 1).timestamp())
+
+            # End date is now
+            end_ts = int(datetime.now().timestamp())
+
+            # Get all fixtures for this league and season
+            all_fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
+
+            if not all_fixtures:
+                logger.warning(f"No fixtures found for league {league_id}, season {season}")
+                return []
+
+            # Filter for matches involving this team
+            team_matches = []
+            for fixture in all_fixtures:
+                if not isinstance(fixture, dict):
+                    continue
+
+                teams = fixture.get('teams', {})
+                home_team = teams.get('home', {})
+                away_team = teams.get('away', {})
+
+                home_id = home_team.get('id')
+                away_id = away_team.get('id')
+
+                # Check if this team is in the match
+                if home_id == team_id or away_id == team_id:
+                    fixture_data = fixture.get('fixture', {})
+                    goals = fixture.get('goals', {})
+
+                    team_matches.append({
+                        'match_id': fixture_data.get('id'),
+                        'home_team_id': home_id,
+                        'away_team_id': away_id,
+                        'home_goals': goals.get('home') or 0,
+                        'away_goals': goals.get('away') or 0,
+                        'match_date': fixture_data.get('date')
+                    })
+
+            logger.info(f"Found {len(team_matches)} matches for team {team_id}")
+            return team_matches
+
+        except Exception as e:
+            logger.error(f"Error fetching team matches: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
     def get_league_teams(self, league_id, season):
-        # Mock implementation - would query actual team data
-        return [{'team_id': i} for i in range(1, 21)]
-    
+        """
+        Get all teams in a specific league and season.
+
+        Args:
+            league_id: League identifier
+            season: Season year
+
+        Returns:
+            List of team dictionaries
+        """
+        try:
+            from ..data.api_client import get_league_teams
+
+            teams_data = get_league_teams(league_id, season)
+
+            if not teams_data or 'response' not in teams_data:
+                logger.warning(f"No teams data for league {league_id}")
+                return []
+
+            teams = []
+            for team_data in teams_data['response']:
+                team_info = team_data.get('team', {})
+                teams.append({
+                    'team_id': team_info.get('id'),
+                    'team_name': team_info.get('name'),
+                    'team_logo': team_info.get('logo')
+                })
+
+            return teams
+
+        except Exception as e:
+            logger.error(f"Error fetching league teams: {e}")
+            return []
+
     def get_league_matches(self, league_id, season):
-        # Mock implementation - would query actual match data
-        return []
+        """
+        Get all matches in a specific league and season.
+
+        Args:
+            league_id: League identifier
+            season: Season year
+
+        Returns:
+            List of all match dictionaries in the league
+        """
+        try:
+            from ..data.api_client import get_fixtures_goals
+            from ..data.api_client import get_league_start_date
+
+            # Get season date range
+            try:
+                start_date = get_league_start_date(league_id)
+                if start_date:
+                    start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp())
+                else:
+                    start_ts = int(datetime(season, 8, 1).timestamp())
+            except Exception as e:
+                logger.warning(f"Could not get league start date: {e}, using default")
+                start_ts = int(datetime(season, 8, 1).timestamp())
+
+            end_ts = int(datetime.now().timestamp())
+
+            # Get all fixtures
+            all_fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
+
+            if not all_fixtures:
+                logger.warning(f"No fixtures found for league {league_id}, season {season}")
+                return []
+
+            # Convert to match format
+            league_matches = []
+            for fixture in all_fixtures:
+                if not isinstance(fixture, dict):
+                    continue
+
+                teams = fixture.get('teams', {})
+                fixture_data = fixture.get('fixture', {})
+                goals = fixture.get('goals', {})
+
+                league_matches.append({
+                    'match_id': fixture_data.get('id'),
+                    'home_team_id': teams.get('home', {}).get('id'),
+                    'away_team_id': teams.get('away', {}).get('id'),
+                    'home_goals': goals.get('home') or 0,
+                    'away_goals': goals.get('away') or 0,
+                    'match_date': fixture_data.get('date')
+                })
+
+            logger.info(f"Found {len(league_matches)} matches for league {league_id}")
+            return league_matches
+
+        except Exception as e:
+            logger.error(f"Error fetching league matches: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
 logger = logging.getLogger(__name__)
 

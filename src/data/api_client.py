@@ -142,6 +142,29 @@ def get_team_statistics(league_id, season, team_id, max_retries=DEFAULT_MAX_RETR
     return data
 
 
+def get_fixture_events(fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Get all events (goals, cards, substitutions) for a specific fixture.
+
+    Args:
+        fixture_id: Fixture identifier
+        max_retries: Maximum retry attempts
+
+    Returns:
+        API response with fixture events including:
+        - Goal events with detail (Normal Goal, Penalty, Own Goal)
+        - Card events (Yellow, Red)
+        - Substitution events
+        - Time information for each event
+        - Player and team information
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/fixtures/events"
+    params = {"fixture": str(fixture_id)}
+
+    data = _make_api_request(url, params, max_retries=max_retries)
+    return data
+
+
 def get_venue_id(team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get the venue ID for a given team in a league and season.
@@ -596,7 +619,10 @@ class APIClient:
     
     def get_venue_id(self, team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
         return get_venue_id(team_id, league_id, season, max_retries)
-    
+
+    def get_fixture_events(self, fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_fixture_events(fixture_id, max_retries)
+
     def get_league_teams(self, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
         return get_league_teams(league_id, season, max_retries)
     
