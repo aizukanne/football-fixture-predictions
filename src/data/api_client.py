@@ -462,6 +462,7 @@ def get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries=DE
 def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get the next fixture for a team after the current fixture.
+    Returns dictionary with keys matching legacy system for backwards compatibility.
     
     Args:
         team_id: Team identifier
@@ -469,7 +470,8 @@ def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIE
         max_retries: Maximum retry attempts
         
     Returns:
-        Next fixture information or None if not found
+        Dict with keys: Next_Fix_Type, Next_Opp, Next_Fix_Date, Next_League
+        or None if not found
     """
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
     params = {
@@ -485,11 +487,25 @@ def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIE
     # Find the fixture that comes after the current one
     for fixture in data["response"]:
         if fixture["fixture"]["id"] != current_fixture_id:
+            # Determine fixture type and opponent
+            fixture_type = "home" if fixture["teams"]["home"]["id"] == team_id else "away"
+            opponent = fixture["teams"]["away"]["name"] if fixture_type == "home" else fixture["teams"]["home"]["name"]
+            
+            # Format date to match legacy system: "YYYY-MM-DD HH:MM"
+            try:
+                fixture_date = datetime.strptime(
+                    fixture["fixture"]["date"], "%Y-%m-%dT%H:%M:%S%z"
+                ).strftime("%Y-%m-%d %H:%M")
+            except (ValueError, KeyError):
+                # Fallback to raw date if parsing fails
+                fixture_date = fixture["fixture"]["date"]
+            
+            # Return with legacy-compatible keys for backwards compatibility
             return {
-                "fixture_type": "home" if fixture["teams"]["home"]["id"] == team_id else "away",
-                "next_opponent": fixture["teams"]["away"]["name"] if fixture["teams"]["home"]["id"] == team_id else fixture["teams"]["home"]["name"],
-                "date": fixture["fixture"]["date"],
-                "league": fixture["league"]["name"]
+                "Next_Fix_Type": fixture_type,
+                "Next_Opp": opponent,
+                "Next_Fix_Date": fixture_date,
+                "Next_League": fixture["league"]["name"]
             }
 
     return None

@@ -1911,7 +1911,7 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             home_losses = data["response"]["fixtures"]["loses"]["home"] or 0
             away_losses = data["response"]["fixtures"]["loses"]["away"] or 0
 
-            # Ansatz points system
+            # Ansatz points system (legacy compatibility)
             home_win_points = 3
             away_win_points = 4
             home_draw_points = 1
@@ -1919,22 +1919,61 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             home_loss_points = -1
             away_loss_points = 0
 
-            # Calculate total points
+            # Calculate aggregate points for display
             home_points = (home_wins * home_win_points) + (home_draws * home_draw_points) + (home_losses * home_loss_points)
             away_points = (away_wins * away_win_points) + (away_draws * away_draw_points) + (away_losses * away_loss_points)
             total_points = home_points + away_points
 
-            # Calculate maximum possible points (all wins)
-            home_games = home_wins + home_draws + home_losses
-            away_games = away_wins + away_draws + away_losses
-            home_max = home_games * home_win_points
-            away_max = away_games * away_win_points
-            max_points = home_max + away_max
+            # LEGACY METHOD: Per-game exponential smoothing to prevent negative performance
+            # Process match_details to calculate per-game points (like makeTeamRankings.py)
+            home_points_per_game = []
+            away_points_per_game = []
+            home_max_points_per_game = []
+            away_max_points_per_game = []
+            total_points_per_game = []
+            total_max_points_per_game = []
 
-            # Calculate performance as percentage of maximum possible points
-            home_performance = home_points / home_max if home_max > 0 else 0
-            away_performance = away_points / away_max if away_max > 0 else 0
-            overall_performance = total_points / max_points if max_points > 0 else 0
+            # Safe iteration over match_details if available
+            if match_details:
+                for goals_scored, goals_conceded, is_home in match_details:
+                    # Determine points based on result
+                    if goals_scored > goals_conceded:  # Win
+                        points = home_win_points if is_home else away_win_points
+                    elif goals_scored == goals_conceded:  # Draw
+                        points = home_draw_points if is_home else away_draw_points
+                    else:  # Loss
+                        points = home_loss_points if is_home else away_loss_points
+
+                    max_pts = home_win_points if is_home else away_win_points
+
+                    # Store separately for home and away matches
+                    if is_home:
+                        home_points_per_game.append(points)
+                        home_max_points_per_game.append(max_pts)
+                    else:
+                        away_points_per_game.append(points)
+                        away_max_points_per_game.append(max_pts)
+
+                    # Store total points across all matches
+                    total_points_per_game.append(points)
+                    total_max_points_per_game.append(max_pts)
+
+            # Apply exponential smoothing with alpha=0.15 (legacy default)
+            from ..statistics.bayesian import apply_smoothing_to_team_data
+            alpha = 0.15
+
+            smoothed_home_points = apply_smoothing_to_team_data(home_points_per_game, alpha) if home_points_per_game else 0
+            smoothed_away_points = apply_smoothing_to_team_data(away_points_per_game, alpha) if away_points_per_game else 0
+            smoothed_total_points = apply_smoothing_to_team_data(total_points_per_game, alpha) if total_points_per_game else 0
+
+            smoothed_home_max = apply_smoothing_to_team_data(home_max_points_per_game, alpha) if home_max_points_per_game else 1
+            smoothed_away_max = apply_smoothing_to_team_data(away_max_points_per_game, alpha) if away_max_points_per_game else 1
+            smoothed_total_max = apply_smoothing_to_team_data(total_max_points_per_game, alpha) if total_max_points_per_game else 1
+
+            # Calculate smoothed performance (prevents negative values through smoothing)
+            home_performance = smoothed_home_points / smoothed_home_max if smoothed_home_max > 0 else 0
+            away_performance = smoothed_away_points / smoothed_away_max if smoothed_away_max > 0 else 0
+            overall_performance = smoothed_total_points / smoothed_total_max if smoothed_total_max > 0 else 0
 
             # Get goal stats
             goals_for_home = data["response"]["goals"]["for"]["total"]["home"] or 0
