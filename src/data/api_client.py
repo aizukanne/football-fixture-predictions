@@ -245,15 +245,16 @@ def get_league_teams(league_id, season, max_retries=DEFAULT_MAX_RETRIES):
 def get_last_five_games(team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get the last five games for a team in a specific league and season.
+    Returns legacy-compatible nested structure with teams and scores objects.
     
     Args:
         team_id: Team identifier
-        league_id: League identifier  
+        league_id: League identifier
         season: Season year
         max_retries: Maximum retry attempts
         
     Returns:
-        List of last five games or empty list if not found
+        List of last five games in legacy format or empty list if not found
     """
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
     params = {
@@ -270,13 +271,17 @@ def get_last_five_games(team_id, league_id, season, max_retries=DEFAULT_MAX_RETR
     
     games = []
     for fixture in data["response"]:
+        # Use legacy-compatible nested structure for backwards compatibility
         games.append({
-            "fixture_id": fixture["fixture"]["id"],
-            "date": fixture["fixture"]["date"],
-            "home_team": fixture["teams"]["home"]["name"],
-            "away_team": fixture["teams"]["away"]["name"],
-            "home_goals": fixture["goals"]["home"],
-            "away_goals": fixture["goals"]["away"]
+            'date': fixture["fixture"]["date"],
+            'teams': {
+                'home': fixture["teams"]["home"]["name"],
+                'away': fixture["teams"]["away"]["name"]
+            },
+            'scores': {
+                'home': fixture["goals"]["home"],
+                'away': fixture["goals"]["away"]
+            }
         })
     
     return games
@@ -285,7 +290,7 @@ def get_last_five_games(team_id, league_id, season, max_retries=DEFAULT_MAX_RETR
 def get_head_to_head(home_team_id, away_team_id, league_id=None, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get head-to-head record between two teams.
-    Returns only the last 5 matches in the same competition if league_id is provided.
+    Returns legacy-compatible simplified structure matching past_fixtures format.
     
     Args:
         home_team_id: Home team identifier
@@ -294,7 +299,7 @@ def get_head_to_head(home_team_id, away_team_id, league_id=None, max_retries=DEF
         max_retries: Maximum retry attempts
         
     Returns:
-        Head-to-head fixture data (limited to last 5 matches in same competition if league_id provided)
+        List of head-to-head games in legacy format with nested teams/scores structure
     """
     url = f"{API_FOOTBALL_BASE_URL}/fixtures/headtohead"
     params = {
@@ -313,8 +318,151 @@ def get_head_to_head(home_team_id, away_team_id, league_id=None, max_retries=DEF
     if league_id:
         fixtures = [f for f in fixtures if f.get('league', {}).get('id') == league_id]
     
-    # Ensure we only return max 5 matches
-    return fixtures[:5]
+    # Transform to legacy-compatible format (same as past_fixtures)
+    games = []
+    for fixture in fixtures[:5]:  # Ensure max 5 matches
+        games.append({
+            'date': fixture['fixture']['date'],
+            'teams': {
+                'home': fixture['teams']['home']['name'],
+                'away': fixture['teams']['away']['name']
+            },
+            'scores': {
+                'home': fixture['goals']['home'],
+                'away': fixture['goals']['away']
+            }
+        })
+    
+    return games
+
+
+def get_player_statistics(player_id, team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Get statistics for a specific player in a team, league, and season.
+    
+    Args:
+        player_id: Player identifier
+        team_id: Team identifier
+        league_id: League identifier
+        season: Season year
+        max_retries: Maximum retry attempts
+        
+    Returns:
+        Player statistics dict or empty dict if not found
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/players"
+    params = {
+        "id": str(player_id),
+        "team": str(team_id),
+        "league": str(league_id),
+        "season": str(season)
+    }
+    
+    data = _make_api_request(url, params, max_retries=max_retries)
+    
+    if not data or "response" not in data or not data.get("results", 0):
+        return {}
+    
+    return data["response"][0] if data["response"] else {}
+
+
+def extract_player_info(player_data):
+    """
+    Extract relevant player information from API response.
+    
+    Args:
+        player_data: Player data from API
+        
+    Returns:
+        Dict with player info or empty dict if no statistics
+    """
+    player_info = player_data.get('player', {})
+    player_name = player_info.get('name')
+    player_id = player_info.get('id')
+    player_photo = player_info.get('photo')
+
+    if 'statistics' in player_data and player_data['statistics']:
+        stat = player_data['statistics'][0]
+        games = stat.get('games', {})
+        position = games.get('position', 'Unknown')
+        minutes_played = games.get('minutes', 0) or 0
+        player_rating = games.get('rating', 0) or 0
+
+        goals_data = stat.get('goals', {})
+        total_goals = goals_data.get('total', 0) or 0
+        assists = goals_data.get('assists', 0) or 0
+        goal_involvement = total_goals + assists
+
+        shots_data = stat.get('shots', {})
+        total_shots = shots_data.get('total', 0) or 0
+        shots_on_target = shots_data.get('on', 0) or 0
+
+        dribbles_data = stat.get('dribbles', {})
+        dribbles_attempted = dribbles_data.get('attempts', 0) or 0
+        dribbles_successful = dribbles_data.get('success', 0) or 0
+
+        duels_data = stat.get('duels', {})
+        duels_total = duels_data.get('total', 0) or 0
+        duels_won = duels_data.get('won', 0) or 0
+
+        passes_data = stat.get('passes', {})
+        key_passes = passes_data.get('key', 0) or 0
+
+        return {
+            'id': player_id,
+            'name': player_name,
+            'position': position,
+            'photo': player_photo,
+            'minutes': minutes_played,
+            'rating': player_rating,
+            'goal_involvement': goal_involvement,
+            'total_goals': total_goals,
+            'assists': assists,
+            'total_shots': total_shots,
+            'shots_on_target': shots_on_target,
+            'dribbles_attempted': dribbles_attempted,
+            'dribbles_successful': dribbles_successful,
+            'duels_total': duels_total,
+            'duels_won': duels_won,
+            'key_passes': key_passes
+        }
+
+    return {}
+
+
+def process_injuries(injury_list, home_team_id, away_team_id, season):
+    """
+    Process injury list and separate by home/away teams with enriched player data.
+    
+    Args:
+        injury_list: List of injuries from API
+        home_team_id: Home team identifier
+        away_team_id: Away team identifier
+        season: Season year
+        
+    Returns:
+        Tuple of (home_injured, away_injured) lists with enriched player info
+    """
+    home_injured = []
+    away_injured = []
+
+    for entry in injury_list:
+        player_id = entry['player']['id']
+        team_id = entry['team']['id']
+        league_id = entry['league']['id']
+
+        player_stats = get_player_statistics(player_id, team_id, league_id, season)
+
+        # Ensure player_stats contains statistics before extracting player info
+        if player_stats and 'statistics' in player_stats and player_stats['statistics']:
+            player_info = extract_player_info(player_stats)
+
+            if team_id == home_team_id:
+                home_injured.append(player_info)
+            elif team_id == away_team_id:
+                away_injured.append(player_info)
+
+    return home_injured, away_injured
 
 
 def get_injured_players(fixture_id, date, max_retries=DEFAULT_MAX_RETRIES):

@@ -15,13 +15,14 @@ from ..prediction.prediction_engine import (
 )
 from ..data.api_client import (
     get_team_statistics,
-    get_venue_id, 
+    get_venue_id,
     fetch_team_match_data,
     get_next_fixture,
     get_last_five_games,
     get_head_to_head,
     get_injured_players,
-    get_league_start_date
+    get_league_start_date,
+    process_injuries
 )
 from ..data.database_client import (
     get_team_params_from_db,
@@ -343,11 +344,35 @@ def send_to_sqs(data):
 
 
 def get_fixture_injuries(fixture_id, date, home_team_id, away_team_id, season):
-    """Get injury data for both teams in a fixture."""
+    """
+    Get injury data for both teams in a fixture with enriched player information.
+    
+    Args:
+        fixture_id: Fixture identifier
+        date: Game date (YYYY-MM-DD format)
+        home_team_id: Home team identifier
+        away_team_id: Away team identifier
+        season: Season year
+        
+    Returns:
+        Tuple of (home_injuries, away_injuries) with enriched player data
+    """
     try:
-        home_injuries = get_injured_players(fixture_id, date)
-        away_injuries = []  # Could be enhanced to filter by team
-        return home_injuries, away_injuries
+        # Get raw injury list from API
+        injury_list = get_injured_players(fixture_id, date)
+        
+        # Initialize empty lists
+        home_injured = []
+        away_injured = []
+        
+        # Process injuries if data is available
+        if injury_list:
+            home_injured, away_injured = process_injuries(
+                injury_list, home_team_id, away_team_id, season
+            )
+        
+        return home_injured, away_injured
+        
     except Exception as e:
         print(f"Error getting injuries for fixture {fixture_id}: {e}")
         return [], []

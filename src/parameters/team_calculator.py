@@ -1983,6 +1983,15 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             goals_against_home = data["response"]["goals"]["against"]["total"]["home"] or 0
             goals_against_away = data["response"]["goals"]["against"]["total"]["away"] or 0
             goals_against = goals_against_home + goals_against_away
+            
+            # Get failed to score and clean sheet stats for legacy compatibility
+            failed_to_score_home = data["response"].get("failed_to_score", {}).get("home", 0) or 0
+            failed_to_score_away = data["response"].get("failed_to_score", {}).get("away", 0) or 0
+            games_scored = total_games_played - (failed_to_score_home + failed_to_score_away)
+            
+            clean_sheet_home = data["response"].get("clean_sheet", {}).get("home", 0) or 0
+            clean_sheet_away = data["response"].get("clean_sheet", {}).get("away", 0) or 0
+            cleansheets = clean_sheet_home + clean_sheet_away
 
             return {
                 'team_info': {
@@ -2003,9 +2012,11 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
                 },
                 'team_logo': team_logo,
                 'team_goal_stats': {
-                    'goals_for': goals_for,
-                    'goals_against': goals_against,
-                    'goal_difference': goals_for - goals_against
+                    'goals_scored': goals_for,              # Legacy key name
+                    'goals_conceded': goals_against,         # Legacy key name
+                    'games_scored': games_scored,            # Legacy field
+                    'cleansheets': cleansheets,              # Legacy field
+                    'total_games_played': total_games_played # Legacy field
                 }
             }
         else:
@@ -2033,8 +2044,10 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             },
             'team_logo': '',
             'team_goal_stats': {
-                'goals_for': 0,
-                'goals_against': 0,
-                'goal_difference': 0
+                'goals_scored': 0,           # Legacy key name
+                'goals_conceded': 0,          # Legacy key name
+                'games_scored': 0,            # Legacy field
+                'cleansheets': 0,             # Legacy field
+                'total_games_played': 0       # Legacy field
             }
         }
