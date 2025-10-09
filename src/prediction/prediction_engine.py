@@ -1126,11 +1126,13 @@ def create_prediction_summary_dict(home_probs, away_probs):
             "draw": round(1 / max(prediction_results['draw_prob'], 0.01), 2),
             "away_win": round(1 / max(prediction_results['away_win_prob'], 0.01), 2)
         },
-        "goals": {
-            "over_2_5": round(1 / max(prediction_results['over_2_5_prob'], 0.01), 2),
-            "under_2_5": round(1 / max(prediction_results['under_2_5_prob'], 0.01), 2),
-            "btts_yes": round(1 / max(prediction_results['btts_prob'], 0.01), 2),
-            "btts_no": round(1 / max(prediction_results['no_btts_prob'], 0.01), 2)
+        "over_under": {
+            "over_2.5": round(1 / max(prediction_results['over_2_5_prob'], 0.01), 2),
+            "under_2.5": round(1 / max(prediction_results['under_2_5_prob'], 0.01), 2)
+        },
+        "btts": {
+            "yes": round(1 / max(prediction_results['btts_prob'], 0.01), 2),
+            "no": round(1 / max(prediction_results['no_btts_prob'], 0.01), 2)
         }
     }
     

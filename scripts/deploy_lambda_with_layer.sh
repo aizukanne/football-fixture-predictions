@@ -77,7 +77,7 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 # Deploy API Service Handler
-echo -e "${YELLOW}[1/5] Deploying API Service Handler...${NC}"
+echo -e "${YELLOW}[1/8] Deploying API Service Handler...${NC}"
 aws lambda create-function \
     --function-name "football-api-service-${ENVIRONMENT}" \
     --runtime python3.13 \
@@ -106,7 +106,7 @@ echo -e "${GREEN}✅ API Service Handler deployed${NC}"
 echo ""
 
 # Deploy Fixture Ingestion Handler
-echo -e "${YELLOW}[2/5] Deploying Fixture Ingestion Handler...${NC}"
+echo -e "${YELLOW}[2/8] Deploying Fixture Ingestion Handler...${NC}"
 FIXTURES_QUEUE_URL="https://sqs.${AWS_REGION}.amazonaws.com/${AWS_ACCOUNT_ID}/football_football-fixture-predictions_${ENVIRONMENT}"
 
 aws lambda create-function \
@@ -136,7 +136,7 @@ echo -e "${GREEN}✅ Fixture Ingestion Handler deployed${NC}"
 echo ""
 
 # Deploy Prediction Handler
-echo -e "${YELLOW}[3/5] Deploying Prediction Handler...${NC}"
+echo -e "${YELLOW}[3/8] Deploying Prediction Handler...${NC}"
 aws lambda create-function \
     --function-name "football-prediction-handler-${ENVIRONMENT}" \
     --runtime python3.13 \
@@ -174,7 +174,7 @@ echo -e "${GREEN}✅ Prediction Handler deployed${NC}"
 echo ""
 
 # Deploy League Parameter Handler
-echo -e "${YELLOW}[4/5] Deploying League Parameter Handler...${NC}"
+echo -e "${YELLOW}[4/8] Deploying League Parameter Handler...${NC}"
 aws lambda create-function \
     --function-name "football-league-parameter-handler-${ENVIRONMENT}" \
     --runtime python3.13 \
@@ -212,7 +212,7 @@ echo -e "${GREEN}✅ League Parameter Handler deployed${NC}"
 echo ""
 
 # Deploy Best Bets Handler
-echo -e "${YELLOW}[5/6] Deploying Best Bets Handler...${NC}"
+echo -e "${YELLOW}[5/8] Deploying Best Bets Handler...${NC}"
 BEST_BETS_QUEUE_URL="https://sqs.${AWS_REGION}.amazonaws.com/${AWS_ACCOUNT_ID}/football_best-bets-analysis_${ENVIRONMENT}"
 
 aws lambda create-function \
@@ -252,7 +252,7 @@ echo -e "${GREEN}✅ Best Bets Handler deployed${NC}"
 echo ""
 
 # Deploy Team Parameter Handler
-echo -e "${YELLOW}[6/6] Deploying Team Parameter Handler...${NC}"
+echo -e "${YELLOW}[6/8] Deploying Team Parameter Handler...${NC}"
 aws lambda create-function \
     --function-name "football-team-parameter-handler-${ENVIRONMENT}" \
     --runtime python3.13 \
@@ -289,7 +289,7 @@ aws lambda create-event-source-mapping \
 
 echo -e "${GREEN}✅ Team Parameter Handler deployed${NC}"
 # Deploy Team Parameter Dispatcher
-echo -e "${YELLOW}[7/7] Deploying Team Parameter Dispatcher...${NC}"
+echo -e "${YELLOW}[7/8] Deploying Team Parameter Dispatcher...${NC}"
 aws lambda create-function \
     --function-name "football-team-parameter-dispatcher-${ENVIRONMENT}" \
     --runtime python3.13 \
@@ -316,6 +316,42 @@ aws lambda update-function-configuration \
 echo -e "${GREEN}✅ Team Parameter Dispatcher deployed${NC}"
 echo ""
 
+# Deploy Match Data Handler
+echo -e "${YELLOW}[8/8] Deploying Match Data Handler...${NC}"
+aws lambda create-function \
+    --function-name "football-match-data-handler-${ENVIRONMENT}" \
+    --runtime python3.13 \
+    --role "$IAM_ROLE_ARN" \
+    --handler src.handlers.match_data_handler.lambda_handler \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --timeout 300 \
+    --memory-size 512 \
+    --layers "$LAMBDA_LAYER_ARN" \
+    --environment "Variables={ENVIRONMENT=${ENVIRONMENT},TABLE_PREFIX=football_,TABLE_SUFFIX=_${ENVIRONMENT},RAPIDAPI_KEY=4c37223acemsh65b1a8b456b72c1p15a99ajsnd4a09ab346a4}" \
+    --region "$AWS_REGION" \
+    2>/dev/null || aws lambda update-function-code \
+    --function-name "football-match-data-handler-${ENVIRONMENT}" \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --region "$AWS_REGION"
+
+aws lambda update-function-configuration \
+    --function-name "football-match-data-handler-${ENVIRONMENT}" \
+    --runtime python3.13 \
+    --layers "$LAMBDA_LAYER_ARN" \
+    --region "$AWS_REGION" \
+    2>/dev/null || true
+
+# Add SQS trigger
+echo -e "${YELLOW}  Configuring SQS trigger...${NC}"
+MATCH_RESULTS_QUEUE_ARN="arn:aws:sqs:${AWS_REGION}:${AWS_ACCOUNT_ID}:football_football-match-results_${ENVIRONMENT}"
+aws lambda create-event-source-mapping \
+    --function-name "football-match-data-handler-${ENVIRONMENT}" \
+    --event-source-arn "$MATCH_RESULTS_QUEUE_ARN" \
+    --batch-size 5 \
+    --region "$AWS_REGION" \
+    2>/dev/null || echo "  (SQS trigger already exists)"
+
+echo -e "${GREEN}✅ Match Data Handler deployed${NC}"
 echo ""
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
@@ -333,6 +369,7 @@ echo "  4. football-league-parameter-handler-${ENVIRONMENT} (python3.13 + layer)
 echo "  5. football-best-bets-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo "  6. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo "  7. football-team-parameter-dispatcher-${ENVIRONMENT} (python3.13 + layer)"
+echo "  8. football-match-data-handler-${ENVIRONMENT} (python3.13 + layer)"
 echo ""
 
 echo -e "${YELLOW}Verify Deployment:${NC}"
