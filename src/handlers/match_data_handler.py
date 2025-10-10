@@ -124,16 +124,29 @@ def process_league_fixtures(league_id, league_name, country, api_fixtures, db_re
             if fixture_id in db_lookup:
                 db_record = db_lookup[fixture_id]
                 
-                # Check if scores need updating
-                current_home = db_record.get('home_goals')
-                current_away = db_record.get('away_goals')
+                # Check if scores need updating (check nested goals structure for backwards compatibility)
+                goals_dict = db_record.get('goals', {})
+                current_home = goals_dict.get('home') if goals_dict else None
+                current_away = goals_dict.get('away') if goals_dict else None
                 
                 if current_home != home_goals or current_away != away_goals:
-                    # Update basic scores
-                    success = update_fixture_scores(fixture_id, home_goals, away_goals)
+                    # Extract halftime scores from API if available
+                    halftime_home = api_fixture.get('halftime_home')
+                    halftime_away = api_fixture.get('halftime_away')
+                    
+                    # Update scores with nested structure (backwards compatible)
+                    success = update_fixture_scores(
+                        fixture_id,
+                        home_goals,
+                        away_goals,
+                        halftime_home,
+                        halftime_away
+                    )
                     
                     if success:
                         print(f"Updated fixture {fixture_id}: {home_goals}-{away_goals}")
+                        if halftime_home is not None and halftime_away is not None:
+                            print(f"  Halftime: {halftime_home}-{halftime_away}")
                         
                         # Collect additional match data if enabled
                         enhanced_data = collect_enhanced_match_data(fixture_id, api_fixture)
@@ -198,40 +211,49 @@ def collect_enhanced_match_data(fixture_id, api_fixture):
     
     Args:
         fixture_id: Fixture identifier
-        api_fixture: Basic fixture data from API
+        api_fixture: Basic fixture data from API (may contain halftime scores and statistics)
         
     Returns:
         Dictionary with enhanced match data or None if not available
     """
     try:
-        # This would make additional API calls to get detailed match statistics
-        # For now, we'll return a placeholder structure
+        # Extract halftime scores if available in API fixture
+        halftime_home = api_fixture.get('halftime_home')
+        halftime_away = api_fixture.get('halftime_away')
         
+        # Build enhanced data structure
         enhanced_data = {
-            'halftime_scores': {
-                'home': None,  # Would be populated from API
-                'away': None
-            },
             'match_statistics': {
-                'shots': {'home': None, 'away': None},
-                'shots_on_target': {'home': None, 'away': None},
-                'possession': {'home': None, 'away': None},
-                'passes': {'home': None, 'away': None},
-                'pass_accuracy': {'home': None, 'away': None},
-                'corners': {'home': None, 'away': None},
-                'fouls': {'home': None, 'away': None},
-                'yellow_cards': {'home': None, 'away': None},
-                'red_cards': {'home': None, 'away': None}
+                'shots': {'home': api_fixture.get('shots_home'), 'away': api_fixture.get('shots_away')},
+                'shots_on_target': {'home': api_fixture.get('shots_on_target_home'), 'away': api_fixture.get('shots_on_target_away')},
+                'possession': {'home': api_fixture.get('possession_home'), 'away': api_fixture.get('possession_away')},
+                'passes': {'home': api_fixture.get('passes_home'), 'away': api_fixture.get('passes_away')},
+                'pass_accuracy': {'home': api_fixture.get('pass_accuracy_home'), 'away': api_fixture.get('pass_accuracy_away')},
+                'corners': {'home': api_fixture.get('corners_home'), 'away': api_fixture.get('corners_away')},
+                'fouls': {'home': api_fixture.get('fouls_home'), 'away': api_fixture.get('fouls_away')},
+                'yellow_cards': {'home': api_fixture.get('yellow_cards_home'), 'away': api_fixture.get('yellow_cards_away')},
+                'red_cards': {'home': api_fixture.get('red_cards_home'), 'away': api_fixture.get('red_cards_away')}
             },
             'collected_at': int(datetime.now().timestamp())
         }
         
-        # In a full implementation, this would make API calls to:
-        # 1. Get halftime scores from fixture details
-        # 2. Get match statistics from statistics endpoint
-        # 3. Get player statistics if needed
+        # Check if we have any actual statistics (not all None)
+        has_stats = any(
+            val is not None
+            for stat_dict in enhanced_data['match_statistics'].values()
+            for val in stat_dict.values()
+        )
         
-        return enhanced_data
+        # Only return enhanced data if we have actual statistics
+        if has_stats:
+            return enhanced_data
+        
+        # In a full implementation, this would make additional API calls to:
+        # 1. Get detailed match statistics from statistics endpoint
+        # 2. Get player statistics if needed
+        # 3. Get formation and tactical data
+        
+        return None
         
     except Exception as e:
         print(f"Error collecting enhanced data for fixture {fixture_id}: {e}")

@@ -368,30 +368,55 @@ def batch_get_fixtures(fixture_ids):
         return []
 
 
-def update_fixture_scores(fixture_id, home_goals, away_goals):
+def update_fixture_scores(fixture_id, home_goals, away_goals, halftime_home=None, halftime_away=None):
     """
-    Update fixture with final scores.
+    Update fixture with final scores using nested goals structure for backwards compatibility.
     Enhanced functionality from checkScores.py.
+    
+    Uses nested structure 'goals: {home, away}' to match multiplier calculator expectations.
+    Also supports halftime scores in nested 'halftime_scores: {home, away}' structure.
 
     Args:
         fixture_id: Fixture identifier
-        home_goals: Home team goals
-        away_goals: Away team goals
+        home_goals: Home team final goals
+        away_goals: Away team final goals
+        halftime_home: Optional halftime home goals
+        halftime_away: Optional halftime away goals
 
     Returns:
         True if successful, False otherwise
     """
     try:
+        # Build goals dict in nested structure (backwards compatible with multiplier calculator)
+        goals_dict = {
+            'home': home_goals,
+            'away': away_goals
+        }
+        
+        # Build update expression and attribute values
+        update_expr = 'SET goals = :goals, score_updated = :updated'
+        expr_values = {
+            ':goals': goals_dict,
+            ':updated': int(datetime.now().timestamp())
+        }
+        
+        # Add halftime scores if provided
+        if halftime_home is not None and halftime_away is not None:
+            halftime_dict = {
+                'home': halftime_home,
+                'away': halftime_away
+            }
+            update_expr += ', halftime_scores = :halftime'
+            expr_values[':halftime'] = halftime_dict
+        
         webFE_table.update_item(
             Key={'fixture_id': fixture_id},
-            UpdateExpression='SET home_goals = :hg, away_goals = :ag, score_updated = :updated',
-            ExpressionAttributeValues={
-                ':hg': home_goals,
-                ':ag': away_goals,
-                ':updated': int(datetime.now().timestamp())
-            }
+            UpdateExpression=update_expr,
+            ExpressionAttributeValues=expr_values
         )
         print(f"Successfully updated scores for fixture {fixture_id}: {home_goals}-{away_goals}")
+        if halftime_home is not None and halftime_away is not None:
+            print(f"  Halftime: {halftime_home}-{halftime_away}")
         return True
     except Exception as e:
         print(f"Error updating scores for fixture {fixture_id}: {e}")

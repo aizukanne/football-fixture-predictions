@@ -42,29 +42,77 @@ This document describes the automated EventBridge rules configured for the Footb
 
 ---
 
-### 2. Daily Fixture Ingestion (Existing)
+### 2. Weekly League Parameter Updates ✅ ACTIVE
 
-**Rule:** `football-daily-fixture-ingestion-prod`
+**Rule:** `football-league-parameter-weekly-prod`
 
-**Purpose:** Fetch upcoming fixtures from API-Football
+**Purpose:** Update league-wide statistical parameters
 
-**Schedule:** Daily at 06:00 UTC  
-**Expression:** `cron(0 6 * * ? *)`
+**Schedule:** Weekly on Sundays at 02:00 UTC
+**Expression:** `cron(0 2 ? * SUN *)`
 
-**Target:** `football-fixture-ingestion-prod` Lambda function
+**Target:** `football-league-parameter-updates` SQS queue → `football-league-parameter-handler-prod` Lambda
+
+**Configuration:**
+```json
+{
+  "Name": "football-league-parameter-weekly-prod",
+  "ScheduleExpression": "cron(0 2 ? * SUN *)",
+  "State": "ENABLED",
+  "Description": "Weekly league parameter updates on Sundays at 02:00 UTC"
+}
+```
+
+**What it does:**
+- Recalculates league baseline statistics (λ_home, λ_away, home advantage)
+- Analyzes recent match results across all leagues
+- Updates league parameters used as foundation for team calculations
+
+**Created:** October 9, 2025
 
 ---
 
-### 3. Weekly Parameter Updates (Existing)
+### 3. Weekly Team Parameter Updates ✅ ACTIVE
 
-**Rule:** `football-weekly-parameter-update-prod`
+**Rule:** `football-team-parameter-weekly-prod`
 
-**Purpose:** Update league and team parameters
+**Purpose:** Update team-specific strength ratings and multipliers
 
-**Schedule:** Weekly on Sundays at 02:00 UTC  
-**Expression:** `cron(0 2 ? * SUN *)`
+**Schedule:** Weekly on Sundays at 03:00 UTC (1 hour after league params)
+**Expression:** `cron(0 3 ? * SUN *)`
 
-**Target:** `football-league-parameter-handler-prod` Lambda function
+**Target:** `football-team-parameter-dispatcher-prod` Lambda function
+
+**Configuration:**
+```json
+{
+  "Name": "football-team-parameter-weekly-prod",
+  "ScheduleExpression": "cron(0 3 ? * SUN *)",
+  "State": "ENABLED",
+  "Description": "Weekly team parameter updates on Sundays at 03:00 UTC (after league params)"
+}
+```
+
+**What it does:**
+- Triggers team parameter dispatcher
+- Dispatcher sends per-league messages to team parameter queue
+- Recalculates team α (attack) and β (defense) strength multipliers
+- Updates form, venue, and opponent-specific adjustments
+
+**Created:** October 9, 2025
+
+---
+
+### 4. Daily Fixture Ingestion ✅ ACTIVE
+
+**Rule:** `football-fixture-ingestion-daily-prod`
+
+**Purpose:** Fetch upcoming fixtures from API-Football
+
+**Schedule:** Daily at 06:00 UTC
+**Expression:** `cron(0 6 * * ? *)`
+
+**Target:** `football-fixture-ingestion-prod` Lambda function
 
 ---
 
@@ -85,27 +133,42 @@ This document describes the automated EventBridge rules configured for the Footb
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
+│                        DAILY SCHEDULE                        │
 │                                                             │
-│  01:00 UTC - Cache Refresh                                  │
-│              └─ Update standings cache                      │
-│              └─ Refresh venue data                          │
-│                                                             │
-│  02:00 UTC - Weekly Parameter Update (Sundays only)         │
-│              └─ Recalculate league parameters               │
-│              └─ Update team strength ratings                │
-│                                                             │
-│  04:00 UTC - Match Results Check ⭐ NEW                     │
-│              └─ Check completed matches                     │
-│              └─ Update actual scores                        │
+│  04:00 UTC - Match Results Check ⭐                         │
+│              └─ Check completed matches (past 24 hours)     │
+│              └─ Update actual scores in database            │
 │              └─ Collect match statistics                    │
 │                                                             │
 │  06:00 UTC - Fixture Ingestion                              │
-│              └─ Fetch today's fixtures                      │
-│              └─ Queue for predictions                       │
+│              └─ Fetch upcoming fixtures from API            │
+│              └─ Queue fixtures for prediction               │
 │              └─ Automatic predictions generated             │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                    WEEKLY SCHEDULE (Sundays)                 │
+│                                                             │
+│  02:00 UTC - League Parameter Updates ⭐                    │
+│              └─ Recalculate league baselines               │
+│              └─ Update λ_home, λ_away, home advantage      │
+│              └─ Analyze league-wide statistics             │
+│                                                             │
+│  03:00 UTC - Team Parameter Updates ⭐                      │
+│              └─ Trigger team parameter dispatcher          │
+│              └─ Recalculate team α (attack) and β (defense)│
+│              └─ Update form, venue, opponent adjustments   │
+│              └─ Process all leagues/teams                  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+**Key Points:**
+- ⭐ indicates newly configured automation
+- 1-hour gap between league and team params ensures dependencies are met
+- Team params use fresh league params from 02:00 UTC
+- Match results collected before fixture ingestion ensures clean data flow
 
 ---
 
