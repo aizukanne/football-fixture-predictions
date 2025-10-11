@@ -40,10 +40,13 @@ echo ""
 echo -e "${YELLOW}[3/6] Creating lightweight requirements...${NC}"
 cat > requirements_light.txt << 'EOF'
 # Lightweight dependencies only
-# Heavy dependencies (numpy, pandas, scipy, scikit-learn, requests) are in Lambda Layer
-# boto3 and botocore are already included in Lambda Python runtime
+# Heavy dependencies are in Lambda Layers:
+# - scipy-layer:4 contains: numpy, pandas, scipy, scikit-learn, requests
+# - llm-layer:1 contains: google-generativeai, anthropic
+# - boto3 and botocore are already included in Lambda Python runtime
 
-# No additional dependencies needed - everything is in Lambda runtime or layer
+# Local development only (not needed in Lambda)
+python-dotenv>=1.0.0
 EOF
 echo -e "${GREEN}✅ Lightweight requirements created${NC}"
 echo ""
@@ -85,9 +88,14 @@ echo "  lambda_deployment/football_prediction_system_light.zip"
 echo ""
 echo -e "${YELLOW}Package Size:${NC} ${PACKAGE_SIZE}"
 echo ""
-echo -e "${YELLOW}Lambda Layer:${NC}"
-echo "  ARN: arn:aws:lambda:eu-west-2:985019772236:layer:scipy-layer:4"
-echo "  Contains: numpy, pandas, scipy, scikit-learn"
+echo -e "${YELLOW}Lambda Layers Used:${NC}"
+echo "  1. scipy-layer:4"
+echo "     ARN: arn:aws:lambda:eu-west-2:985019772236:layer:scipy-layer:4"
+echo "     Contains: numpy, pandas, scipy, scikit-learn, requests"
+echo ""
+echo "  2. llm-layer:1"
+echo "     ARN: arn:aws:lambda:eu-west-2:985019772236:layer:llm-layer:1"
+echo "     Contains: google-generativeai, anthropic"
 echo ""
 echo -e "${YELLOW}Next Steps:${NC}"
 echo "  Deploy Lambda functions with layer:"

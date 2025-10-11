@@ -245,7 +245,7 @@ echo -e "${GREEN}✅ Team Parameter Handler deployed${NC}"
 echo ""
 
 # Deploy Match Data Handler
-echo -e "${YELLOW}[7/7] Deploying Match Data Handler...${NC}"
+echo -e "${YELLOW}[7/8] Deploying Match Data Handler...${NC}"
 aws lambda create-function \
     --function-name "football-match-data-handler-${ENVIRONMENT}" \
     --runtime python3.9 \
@@ -270,6 +270,40 @@ aws lambda create-event-source-mapping \
     --region "$AWS_REGION" \
     2>/dev/null || echo "  (SQS trigger already exists)"
 
+
+# Deploy GenAI Pundit Handler
+echo -e "${YELLOW}[8/8] Deploying GenAI Pundit Handler...${NC}"
+LLM_LAYER_ARN="arn:aws:lambda:eu-west-2:985019772236:layer:llm-layer:1"
+
+aws lambda create-function \
+    --function-name "football-genai-pundit-${ENVIRONMENT}" \
+    --runtime python3.11 \
+    --role "$IAM_ROLE_ARN" \
+    --handler src.handlers.genai_pundit_handler.lambda_handler \
+    --zip-file fileb://lambda_deployment/football_prediction_system.zip \
+    --timeout 60 \
+    --memory-size 512 \
+    --layers "$LLM_LAYER_ARN" \
+    --environment "Variables={ENVIRONMENT=${ENVIRONMENT},ACTIVE_AI_PROVIDER=gemini,GAME_FIXTURES_TABLE=game_fixtures,TEAM_PARAMETERS_TABLE=team_parameters,LEAGUE_PARAMETERS_TABLE=league_parameters,GAME_ANALYSIS_TABLE=game_analysis,GEMINI_API_KEY=${GEMINI_API_KEY:-},ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-},VALID_MOBILE_API_KEY=${VALID_MOBILE_API_KEY:-}}" \
+    --region "$AWS_REGION" \
+    2>/dev/null || {
+        # Update function code
+        aws lambda update-function-code \
+            --function-name "football-genai-pundit-${ENVIRONMENT}" \
+            --zip-file fileb://lambda_deployment/football_prediction_system.zip \
+            --region "$AWS_REGION"
+        
+        # Update layer configuration
+        aws lambda update-function-configuration \
+            --function-name "football-genai-pundit-${ENVIRONMENT}" \
+            --layers "$LLM_LAYER_ARN" \
+            --region "$AWS_REGION"
+    }
+
+echo -e "${GREEN}✅ GenAI Pundit Handler deployed with LLM layer${NC}"
+echo -e "${YELLOW}  ℹ Using existing layer: llm-layer:1${NC}"
+echo -e "${YELLOW}  ⚠ Note: Remember to set API keys (GEMINI_API_KEY, ANTHROPIC_API_KEY, VALID_MOBILE_API_KEY)${NC}"
+echo ""
 echo -e "${GREEN}✅ Match Data Handler deployed${NC}"
 echo ""
 
@@ -288,6 +322,7 @@ echo "  4. football-league-parameter-handler-${ENVIRONMENT}"
 echo "  5. football-best-bets-handler-${ENVIRONMENT}"
 echo "  6. football-team-parameter-handler-${ENVIRONMENT}"
 echo "  7. football-match-data-handler-${ENVIRONMENT}"
+echo "  8. football-genai-pundit-${ENVIRONMENT}"
 echo ""
 
 echo -e "${YELLOW}Next Steps:${NC}"

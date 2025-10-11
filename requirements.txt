@@ -21,4 +21,9 @@ typing-extensions>=4.0.0  # For Python 3.8 compatibility
 
 # Optional but Recommended
 scikit-learn>=1.0.0,<2.0.0  # For isotonic regression in confidence calibration
+python-dotenv>=1.0.0  # Environment variable management for local development
 numexpr>=2.8.0  # For faster numerical operations
+
+# Note: GenAI Pundit uses the existing llm-layer Lambda layer
+# (arn:aws:lambda:eu-west-2:985019772236:layer:llm-layer:1)
+# which contains google-generativeai and anthropic packages

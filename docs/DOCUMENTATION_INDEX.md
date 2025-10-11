@@ -90,7 +90,16 @@ This project includes comprehensive documentation covering all aspects from quic
    - Performance tuning
    - Troubleshooting
 
-2. **[docs/ENVIRONMENT_CONFIGURATION.md](docs/ENVIRONMENT_CONFIGURATION.md)** - Multi-environment setup
+2. **[docs/guides/GENAI_PUNDIT_DEPLOYMENT_GUIDE.md](docs/guides/GENAI_PUNDIT_DEPLOYMENT_GUIDE.md)** - GenAI Pundit v2.0 deployment
+   - Complete deployment workflow
+   - API key configuration (Gemini & Claude)
+   - Lambda layer integration
+   - API Gateway setup
+   - Environment variable management
+   - Testing and troubleshooting
+   - Cost estimates and monitoring
+
+3. **[docs/ENVIRONMENT_CONFIGURATION.md](docs/ENVIRONMENT_CONFIGURATION.md)** - Multi-environment setup
    - Environment-based table naming
    - Multi-environment deployments (dev/staging/prod)
    - Multi-tenant architecture
