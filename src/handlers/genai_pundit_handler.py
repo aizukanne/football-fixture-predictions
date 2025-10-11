@@ -12,6 +12,7 @@ import json
 import time
 import os
 import boto3
+import requests
 from boto3.dynamodb.conditions import Key
 from typing import Dict, Any, Optional
 
@@ -41,6 +42,207 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000"  # For local testing
 ]
 MOBILE_API_KEY = os.getenv('VALID_MOBILE_API_KEY')
+
+# API Keys for external services
+OPENWEATHER_API_KEY = os.getenv('OPENWEATHER_KEY')
+RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY')
+
+
+def get_coordinates(location_name: str) -> Optional[tuple]:
+    """
+    Get latitude and longitude coordinates for a location using OpenWeather Geocoding API.
+    
+    Args:
+        location_name: City name (e.g., "Manchester", "London")
+        
+    Returns:
+        Tuple of (lat, lon) or None if not found
+    """
+    if not OPENWEATHER_API_KEY:
+        print("Warning: OPENWEATHER_KEY not configured")
+        return None
+    
+    base_url = 'http://api.openweathermap.org/geo/1.0/direct'
+    params = {
+        'q': location_name,
+        'limit': 1,
+        'appid': OPENWEATHER_API_KEY
+    }
+    
+    try:
+        response = requests.get(base_url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                lat = data[0]['lat']
+                lon = data[0]['lon']
+                return lat, lon
+        else:
+            print(f"Geocoding API error: {response.status_code}")
+    except Exception as e:
+        print(f"Error getting coordinates for {location_name}: {e}")
+    
+    return None
+
+
+def get_weather_data(location_name: str) -> Optional[dict]:
+    """
+    Get weather forecast data for a location using OpenWeather OneCall API 3.0.
+    
+    Args:
+        location_name: City name (e.g., "Manchester, England")
+        
+    Returns:
+        Weather data dict with hourly forecasts or None if failed
+    """
+    # Extract city name (remove country/region)
+    location_name = location_name.split(',')[0].strip()
+    
+    # Validate location_name
+    if not location_name:
+        print('Location name is empty')
+        return None
+    
+    coordinates = get_coordinates(location_name)
+    if not coordinates:
+        print(f'Could not find coordinates for location: {location_name}')
+        return None
+    
+    lat, lon = coordinates
+    url = 'https://api.openweathermap.org/data/3.0/onecall'
+    params = {
+        'appid': OPENWEATHER_API_KEY,
+        'lat': lat,
+        'lon': lon,
+        'exclude': 'current,minutely,daily,alerts',
+        'units': 'metric'
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code != 200:
+            print(f'Weather API error: {response.status_code} - {response.reason}')
+            return None
+        
+        return response.json()
+    except Exception as e:
+        print(f"Error getting weather data: {e}")
+        return None
+
+
+def get_weather_forecast(timestamp: int, match_venue: str) -> dict:
+    """
+    Get weather forecast for a specific match time (±2 hours window).
+    
+    Args:
+        timestamp: Match timestamp (Unix epoch)
+        match_venue: Venue city name
+        
+    Returns:
+        Dict with relevant weather forecasts within the time window
+    """
+    weather_data = get_weather_data(match_venue)
+    
+    if not weather_data:
+        return {'weather': {}}
+    
+    # Define the range (2 hours before and after the given timestamp)
+    two_hours = 2 * 3600
+    start_range = timestamp - two_hours
+    end_range = timestamp + two_hours
+    
+    # Initialize a dictionary to store the relevant forecasts
+    relevant_forecasts = {}
+    
+    # Loop through the hourly forecasts
+    for forecast in weather_data.get('hourly', []):
+        forecast_timestamp = forecast.get('dt')
+        # Check if the forecast's timestamp falls within the desired range
+        if start_range <= forecast_timestamp <= end_range:
+            str_forecast_timestamp = str(forecast_timestamp)
+            relevant_forecasts[str_forecast_timestamp] = forecast.get('weather', [])
+    
+    return {'weather': relevant_forecasts}
+
+
+def get_team_standing(home_team_id: int, away_team_id: int, league_id: int, season: int) -> tuple:
+    """
+    Get team standings from RapidAPI for both home and away teams.
+    
+    Args:
+        home_team_id: Home team ID
+        away_team_id: Away team ID
+        league_id: League ID
+        season: Season year
+        
+    Returns:
+        Tuple of (home_data, away_data) dicts with standings info
+    """
+    if not RAPIDAPI_KEY:
+        print("Warning: RAPIDAPI_KEY not configured")
+        return {}, {}
+    
+    url = "https://api-football-v1.p.rapidapi.com/v3/standings"
+    querystring = {
+        "league": str(league_id),
+        "season": str(season)
+    }
+    headers = {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": "api-football-v1.p.rapidapi.com"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=querystring, timeout=10)
+        if response.status_code != 200:
+            print(f"Standings API error: {response.status_code}")
+            return {}, {}
+        
+        data = response.json()
+        if "response" not in data or not data["response"]:
+            print("No standings data found")
+            return {}, {}
+        
+        standings_list = data["response"][0]["league"]["standings"][0]
+        league_name = data["response"][0]["league"]["name"]
+        
+        total_teams = len(standings_list)
+        home_data = None
+        away_data = None
+        
+        for standing in standings_list:
+            team = standing.get("team", {})
+            team_id = team.get("id")
+            if team_id == home_team_id:
+                home_data = {
+                    "team_name": team.get("name"),
+                    "league_position": standing.get("rank"),
+                    "league_points": standing.get("points"),
+                    "total_teams": total_teams,
+                    "league_name": league_name
+                }
+            if team_id == away_team_id:
+                away_data = {
+                    "team_name": team.get("name"),
+                    "league_position": standing.get("rank"),
+                    "league_points": standing.get("points"),
+                    "total_teams": total_teams,
+                    "league_name": league_name
+                }
+        
+        if not home_data:
+            print(f"Home team with id {home_team_id} not found in standings")
+            home_data = {}
+        if not away_data:
+            print(f"Away team with id {away_team_id} not found in standings")
+            away_data = {}
+        
+        return home_data, away_data
+    
+    except Exception as e:
+        print(f"Error getting team standings: {e}")
+        return {}, {}
 
 
 def lambda_handler(event, context):
@@ -317,7 +519,27 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
         
         print(f"Home team: {home_team_id}, Away team: {away_team_id}, League: {league_id}")
         
-        # 3. Load team parameters
+        # 3. Fetch weather data
+        venue_city = fixture_data.get('venue', {}).get('city', '')
+        timestamp = fixture_data.get('timestamp', 0)
+        weather_data = {}
+        if venue_city and timestamp:
+            print(f"Fetching weather for {venue_city} at timestamp {timestamp}")
+            weather_data = get_weather_forecast(timestamp, venue_city)
+        else:
+            print("Warning: No venue city or timestamp found for weather fetch")
+        
+        # 4. Fetch team standings
+        home_standings, away_standings = get_team_standing(
+            home_team_id,
+            away_team_id,
+            league_id,
+            season
+        )
+        print(f"Home standings: {home_standings}")
+        print(f"Away standings: {away_standings}")
+        
+        # 5. Load team parameters
         home_params_raw = get_team_parameters(league_id, home_team_id)
         away_params_raw = get_team_parameters(league_id, away_team_id)
         
@@ -325,35 +547,38 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
             print("Warning: Team parameters not found")
             return None
         
-        # 4. Extract AI-relevant parameters
+        # 6. Extract AI-relevant parameters
         home_params = extract_ai_relevant_parameters(home_params_raw)
         away_params = extract_ai_relevant_parameters(away_params_raw)
         
         print(f"Home params: {get_parameter_summary(home_params)}")
         print(f"Away params: {get_parameter_summary(away_params)}")
         
-        # 5. Load league parameters
+        # 7. Load league parameters
         league_params = get_league_parameters(league_id, season)
         if not league_params:
             league_params = {}
             print("Warning: League parameters not found, using empty dict")
         
-        # 6. Build AI context
+        # 8. Build AI context
         context = build_ai_context(
-            fixture_data, 
-            home_params, 
-            away_params, 
-            league_params
+            fixture_data,
+            home_params,
+            away_params,
+            league_params,
+            weather_data=weather_data,
+            home_standings=home_standings,
+            away_standings=away_standings
         )
         
         print("AI context built successfully")
         
-        # 7. Generate analysis with AI
+        # 9. Generate analysis with AI
         analysis_text, provider, generation_time_ms = ai_service.generate_analysis(context)
         
         print(f"Analysis generated with {provider} in {generation_time_ms}ms")
         
-        # 8. Save to database
+        # 10. Save to database
         current_time = int(time.time())
         analysis_output = {
             'fixture_id': fixture_id,

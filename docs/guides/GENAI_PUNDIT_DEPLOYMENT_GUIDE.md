@@ -45,7 +45,19 @@ You need to obtain API keys for:
    - Navigate to API Keys
    - Generate new API key
 
-3. **Mobile API Key** (for frontend authentication)
+3. **OpenWeather API** (for weather forecasts)
+   - Get from: https://openweathermap.org/api
+   - Sign up for a free account
+   - Navigate to API Keys
+   - Generate API key (free tier includes 1,000 calls/day)
+   - OneCall API 3.0 is used for hourly weather forecasts
+
+4. **RapidAPI Key** (for team standings)
+   - Get from: https://rapidapi.com/
+   - Subscribe to API-Football (already used in the system)
+   - Use existing RAPIDAPI_KEY from other handlers
+
+5. **Mobile API Key** (for frontend authentication)
    - This is your existing mobile app API key
    - Used for authenticating requests from mobile/web apps
 
@@ -66,6 +78,10 @@ ACTIVE_AI_PROVIDER=gemini
 # AI Provider API Keys
 GEMINI_API_KEY=your_gemini_api_key_here
 ANTHROPIC_API_KEY=your_claude_api_key_here
+
+# Weather and Standings API Keys
+OPENWEATHER_KEY=your_openweather_api_key_here
+RAPIDAPI_KEY=your_rapidapi_key_here
 
 # Mobile/Web Authentication
 VALID_MOBILE_API_KEY=your_existing_mobile_api_key
@@ -99,13 +115,14 @@ This creates:
 ### Step 3: Deploy Lambda Function
 
 ```bash
-# Deploy all Lambda functions including GenAI Pundit
-./scripts/deploy_lambda_functions.sh prod
+# Deploy all Lambda functions including GenAI Pundit (9 functions total)
+./scripts/deploy_lambda_with_layer.sh prod
 ```
 
 This automatically:
-- ✅ Deploys GenAI Pundit as function #8
+- ✅ Deploys GenAI Pundit as function #9 (Python 3.11)
 - ✅ Attaches both `scipy-layer:4` and `llm-layer:1`
+- ✅ Deploys 8 other functions (Python 3.13)
 - ✅ Sets up basic environment variables
 - ✅ Configures timeout (60s) and memory (512MB)
 
@@ -128,12 +145,16 @@ aws lambda update-function-configuration \
         GAME_ANALYSIS_TABLE=game_analysis,
         GEMINI_API_KEY=YOUR_ACTUAL_GEMINI_KEY,
         ANTHROPIC_API_KEY=YOUR_ACTUAL_CLAUDE_KEY,
+        OPENWEATHER_KEY=YOUR_ACTUAL_OPENWEATHER_KEY,
+        RAPIDAPI_KEY=YOUR_ACTUAL_RAPIDAPI_KEY,
         VALID_MOBILE_API_KEY=YOUR_ACTUAL_MOBILE_KEY
     }" \
     --region eu-west-2
 ```
 
 **Security Note**: Never commit API keys to Git. Always set them directly in Lambda or use AWS Secrets Manager.
+
+**Note**: The `RAPIDAPI_KEY` should be the same key used by other handlers (fixture ingestion, match data, etc.) that access the API-Football service.
 
 ### Step 5: Test Lambda Function Directly
 
@@ -442,14 +463,17 @@ aws lambda update-function-code \
 ## Summary Checklist
 
 - [ ] Obtain Gemini API key
-- [ ] Obtain Claude API key  
+- [ ] Obtain Claude API key
+- [ ] Obtain OpenWeather API key
+- [ ] Verify RapidAPI key (should already exist)
 - [ ] Build lightweight Lambda package
 - [ ] Deploy Lambda function
-- [ ] Configure environment variables with API keys
+- [ ] Configure environment variables with all API keys
 - [ ] Test Lambda function directly
 - [ ] Create game_analysis table (if needed)
 - [ ] Deploy API Gateway (optional)
 - [ ] Test API Gateway endpoint
+- [ ] Verify weather and standings data is being fetched
 - [ ] Set up monitoring and alarms
 - [ ] Document API endpoint for frontend teams
 

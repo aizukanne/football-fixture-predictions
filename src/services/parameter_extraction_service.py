@@ -118,8 +118,10 @@ def extract_ai_relevant_parameters(team_params: dict) -> dict:
     return extracted
 
 
-def build_ai_context(fixture_data: dict, home_params: dict, away_params: dict, 
-                     league_params: dict) -> dict:
+def build_ai_context(fixture_data: dict, home_params: dict, away_params: dict,
+                     league_params: dict, weather_data: Optional[dict] = None,
+                     home_standings: Optional[dict] = None,
+                     away_standings: Optional[dict] = None) -> dict:
     """
     Build complete context for AI analysis.
     
@@ -128,6 +130,9 @@ def build_ai_context(fixture_data: dict, home_params: dict, away_params: dict,
         home_params: Extracted home team parameters
         away_params: Extracted away team parameters
         league_params: League parameters and conformance data
+        weather_data: Weather forecast data (optional)
+        home_standings: Home team standings data (optional)
+        away_standings: Away team standings data (optional)
         
     Returns:
         Complete context dictionary for AI provider
@@ -144,17 +149,19 @@ def build_ai_context(fixture_data: dict, home_params: dict, away_params: dict,
             'team_name': fixture_data.get('home', {}).get('team_name'),
             'team_id': fixture_data.get('home', {}).get('team_id'),
             'predictions': fixture_data.get('home'),
-            'parameters': home_params
+            'parameters': home_params,
+            'standings': home_standings if home_standings else {}
         },
         'away_team': {
             'team_name': fixture_data.get('away', {}).get('team_name'),
             'team_id': fixture_data.get('away', {}).get('team_id'),
             'predictions': fixture_data.get('away'),
-            'parameters': away_params
+            'parameters': away_params,
+            'standings': away_standings if away_standings else {}
         },
         'match_predictions': fixture_data.get('predictions', {}),
         'league_conformance': league_params.get('league_conformance', {}),
-        'weather': fixture_data.get('weather')  # If available
+        'weather': weather_data if weather_data else fixture_data.get('weather', {})
     }
     
     return context

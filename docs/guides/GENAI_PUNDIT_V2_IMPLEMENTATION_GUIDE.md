@@ -1638,6 +1638,8 @@ aws lambda create-function \
         ACTIVE_AI_PROVIDER=gemini,
         GEMINI_API_KEY=your_gemini_key,
         ANTHROPIC_API_KEY=your_claude_key,
+        OPENWEATHER_KEY=your_openweather_key,
+        RAPIDAPI_KEY=your_rapidapi_key,
         VALID_MOBILE_API_KEY=your_mobile_key,
         GAME_FIXTURES_TABLE=game_fixtures,
         TEAM_PARAMETERS_TABLE=team_parameters,
@@ -1653,6 +1655,8 @@ aws lambda update-function-configuration \
         ACTIVE_AI_PROVIDER=gemini,
         GEMINI_API_KEY=your_key,
         ANTHROPIC_API_KEY=your_key,
+        OPENWEATHER_KEY=your_key,
+        RAPIDAPI_KEY=your_key,
         VALID_MOBILE_API_KEY=your_key
     }
 ```
@@ -2030,9 +2034,15 @@ cat > .env.example << EOF
 # AI Provider Configuration
 ACTIVE_AI_PROVIDER=gemini
 
-# API Keys (obtain from respective providers)
+# AI Provider API Keys
 GEMINI_API_KEY=your_gemini_api_key_here
 ANTHROPIC_API_KEY=your_claude_api_key_here
+
+# Weather and Standings API Keys
+OPENWEATHER_KEY=your_openweather_api_key_here
+RAPIDAPI_KEY=your_rapidapi_key_here
+
+# Mobile/Web Authentication
 VALID_MOBILE_API_KEY=your_mobile_api_key_here
 
 # DynamoDB Tables
@@ -2072,6 +2082,24 @@ CLAUDE_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 ```
 
 This is the same pattern used throughout the project for RAPIDAPI_KEY, OPENWEATHER_KEY, and all other API keys.
+
+#### Weather and Standings Integration
+
+GenAI Pundit v2.0 now includes weather forecasts and team standings to achieve feature parity with the legacy version:
+
+**Weather Data (via OpenWeather API)**:
+- Fetches hourly weather forecast for match venue
+- Uses OneCall API 3.0 for detailed forecasts
+- Geocoding API to convert city names to coordinates
+- Weather data included in AI context for better predictions
+
+**Team Standings (via RapidAPI)**:
+- Fetches current league standings for both teams
+- Includes league position, points, and total teams
+- Uses the same RAPIDAPI_KEY as other handlers
+- Standings data included in AI context for better analysis
+
+Both features are optional - if API keys are not configured, the system will log warnings but continue to generate analysis without this data.
 
 #### 2. **Rotate Keys Regularly**
 
@@ -2148,6 +2176,8 @@ cat >> .env << EOF
 ACTIVE_AI_PROVIDER=gemini
 GEMINI_API_KEY=your_gemini_key
 ANTHROPIC_API_KEY=your_claude_key
+OPENWEATHER_KEY=your_openweather_key
+RAPIDAPI_KEY=your_rapidapi_key
 VALID_MOBILE_API_KEY=your_mobile_key
 EOF
 
@@ -2175,6 +2205,8 @@ aws lambda update-function-configuration \
         ACTIVE_AI_PROVIDER=gemini,
         GEMINI_API_KEY=your_key,
         ANTHROPIC_API_KEY=your_key,
+        OPENWEATHER_KEY=your_key,
+        RAPIDAPI_KEY=your_key,
         VALID_MOBILE_API_KEY=your_key,
         GAME_FIXTURES_TABLE=game_fixtures,
         TEAM_PARAMETERS_TABLE=team_parameters,
@@ -2291,6 +2323,8 @@ aws lambda update-function-configuration \
         ACTIVE_AI_PROVIDER=gemini,
         GEMINI_API_KEY=$(aws ssm get-parameter --name /genai/gemini-key --with-decryption --query 'Parameter.Value' --output text),
         ANTHROPIC_API_KEY=$(aws ssm get-parameter --name /genai/claude-key --with-decryption --query 'Parameter.Value' --output text),
+        OPENWEATHER_KEY=$(aws ssm get-parameter --name /api/openweather-key --with-decryption --query 'Parameter.Value' --output text),
+        RAPIDAPI_KEY=$(aws ssm get-parameter --name /api/rapidapi-key --with-decryption --query 'Parameter.Value' --output text),
         VALID_MOBILE_API_KEY=$(aws ssm get-parameter --name /api/mobile-key --with-decryption --query 'Parameter.Value' --output text)
     }
 

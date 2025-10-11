@@ -3,8 +3,10 @@
 ###############################################################################
 # Lambda Functions Deployment with Layer
 #
-# This script deploys Lambda functions using Python 3.13 and a Lambda Layer
-# for heavy dependencies (numpy, pandas, scipy, scikit-learn)
+# This script deploys Lambda functions using Python 3.13 (or 3.11 for GenAI Pundit)
+# with Lambda Layers for dependencies:
+# - scipy-layer:4 for all functions (numpy, pandas, scipy, scikit-learn)
+# - llm-layer:1 for GenAI Pundit only (google-generativeai, anthropic)
 ###############################################################################
 
 set -e
@@ -72,7 +74,7 @@ fi
 
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}   Deploying Lambda Functions${NC}"
+echo -e "${BLUE}   Deploying Lambda Functions (9 total)${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -354,6 +356,39 @@ aws lambda create-event-source-mapping \
 echo -e "${GREEN}✅ Match Data Handler deployed${NC}"
 echo ""
 
+# Deploy GenAI Pundit Handler
+echo -e "${YELLOW}[9/9] Deploying GenAI Pundit Handler...${NC}"
+LLM_LAYER_ARN="arn:aws:lambda:eu-west-2:985019772236:layer:llm-layer:1"
+
+aws lambda create-function \
+    --function-name "football-genai-pundit-${ENVIRONMENT}" \
+    --runtime python3.11 \
+    --role "$IAM_ROLE_ARN" \
+    --handler src.handlers.genai_pundit_handler.lambda_handler \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --timeout 60 \
+    --memory-size 512 \
+    --layers "$LLM_LAYER_ARN" \
+    --environment "Variables={ENVIRONMENT=${ENVIRONMENT},ACTIVE_AI_PROVIDER=gemini,GAME_FIXTURES_TABLE=game_fixtures,TEAM_PARAMETERS_TABLE=team_parameters,LEAGUE_PARAMETERS_TABLE=league_parameters,GAME_ANALYSIS_TABLE=game_analysis,GEMINI_API_KEY=${GEMINI_API_KEY:-},ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-},VALID_MOBILE_API_KEY=${VALID_MOBILE_API_KEY:-}}" \
+    --region "$AWS_REGION" \
+    2>/dev/null || aws lambda update-function-code \
+    --function-name "football-genai-pundit-${ENVIRONMENT}" \
+    --zip-file fileb://"$PACKAGE_FILE" \
+    --region "$AWS_REGION"
+
+# Update configuration if function already exists
+aws lambda update-function-configuration \
+    --function-name "football-genai-pundit-${ENVIRONMENT}" \
+    --runtime python3.11 \
+    --layers "$LLM_LAYER_ARN" \
+    --region "$AWS_REGION" \
+    2>/dev/null || true
+
+echo -e "${GREEN}✅ GenAI Pundit Handler deployed${NC}"
+echo -e "${YELLOW}  ℹ Python 3.11 + llm-layer:1 ONLY${NC}"
+echo -e "${YELLOW}  ⚠ Remember to set API keys (GEMINI_API_KEY, ANTHROPIC_API_KEY, VALID_MOBILE_API_KEY)${NC}"
+echo ""
+
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}   Deployment Complete!${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
@@ -362,14 +397,15 @@ echo ""
 echo -e "${GREEN}✅ All Lambda functions deployed successfully${NC}"
 echo ""
 echo -e "${YELLOW}Deployed Functions:${NC}"
-echo "  1. football-api-service-${ENVIRONMENT} (python3.13 + layer)"
-echo "  2. football-fixture-ingestion-${ENVIRONMENT} (python3.13 + layer)"
-echo "  3. football-prediction-handler-${ENVIRONMENT} (python3.13 + layer)"
-echo "  4. football-league-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
-echo "  5. football-best-bets-handler-${ENVIRONMENT} (python3.13 + layer)"
-echo "  6. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + layer)"
-echo "  7. football-team-parameter-dispatcher-${ENVIRONMENT} (python3.13 + layer)"
-echo "  8. football-match-data-handler-${ENVIRONMENT} (python3.13 + layer)"
+echo "  1. football-api-service-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  2. football-fixture-ingestion-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  3. football-prediction-handler-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  4. football-league-parameter-handler-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  5. football-best-bets-handler-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  6. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  7. football-team-parameter-dispatcher-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  8. football-match-data-handler-${ENVIRONMENT} (python3.13 + scipy-layer)"
+echo "  9. football-genai-pundit-${ENVIRONMENT} (python3.11 + llm-layer:1 ONLY)"
 echo ""
 
 echo -e "${YELLOW}Verify Deployment:${NC}"
