@@ -20,7 +20,7 @@ class ValidationService:
     def __init__(self):
         # Allowed parameter patterns
         self.country_pattern = re.compile(r'^[A-Za-z\s\-]{1,50}$')
-        self.league_pattern = re.compile(r'^[A-Za-z0-9\s\-\.]{1,100}$')
+        self.league_pattern = re.compile(r'^[\w\s\-\.]{1,100}$', re.UNICODE)
         self.date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
     def validate_query_params(self, params: Dict) -> ValidationResult:
