@@ -7,6 +7,6 @@
   "stage_name": "prod",
   "usage_plan_id": "s1r7fc",
   "api_key_id": "bprnzrkxd5",
-  "api_key_value": "NLYHAQYy8R8nn7pJMzuBV6A1Hv84Br7E832lcQDv",
-  "lambda_function_arn": "arn:aws:lambda:eu-west-2:985019772236:function:football-api-service-prod"
+  "api_key_value": "HIDDEN - retrieve from AWS Console",
+  "lambda_function_arn": "arn:aws:lambda:eu-west-2:985019772236:function:football-genai-pundit-prod"
 }

@@ -1,0 +1,11 @@
+{
+  "environment": "prod",
+  "region": "eu-west-2",
+  "api_id": "esqyjhhc4e",
+  "endpoint_url": "https://esqyjhhc4e.execute-api.eu-west-2.amazonaws.com/prod",
+  "analysis_endpoint": "https://esqyjhhc4e.execute-api.eu-west-2.amazonaws.com/prod/analysis",
+  "resource_id": "lhmoik",
+  "lambda_function_arn": "arn:aws:lambda:eu-west-2:985019772236:function:football-genai-pundit-prod",
+  "stage_name": "prod",
+  "deployment_id": "f276vn"
+}

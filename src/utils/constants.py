@@ -100,7 +100,7 @@ BEST_BETS_QUEUE_URL = os.getenv(
 )
 
 # Default Values
-DEFAULT_LAMBDA_CEILING = 4.0
+DEFAULT_LAMBDA_CEILING = 7.0  # Increased from 4.0 to allow for higher-scoring predictions
 MINIMUM_GAMES_THRESHOLD = 6
 MINIMUM_LEAGUE_GAMES = 50
 MAX_SEASON_LOOKBACK = 3

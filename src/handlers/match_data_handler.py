@@ -7,7 +7,7 @@ Supports both basic score updates and enhanced match statistics collection.
 import json
 from datetime import datetime, timedelta
 
-from ..data.api_client import get_fixtures_goals, get_league_start_date
+from ..data.api_client import get_fixtures_goals_by_ids, get_league_start_date
 from ..data.database_client import (
     query_dynamodb_records,
     add_attribute_to_dynamodb_item,
@@ -21,9 +21,23 @@ def lambda_handler(event, context):
     """
     Main Lambda handler for match data collection.
     Enhanced version of checkScores with support for comprehensive match statistics.
+
+    Supports invocation via:
+    1. Direct invocation with time_range in event
+    2. SQS message with time_range in message body
+    3. EventBridge scheduled event (uses default 24h range)
     """
     print("Match data collection started")
-    
+
+    # Check if invoked via SQS and parse message body
+    if 'Records' in event and event['Records']:
+        try:
+            message_body = json.loads(event['Records'][0]['body'])
+            print(f"Processing SQS message: {message_body}")
+            event = message_body  # Use parsed body as event
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            print(f"Error parsing SQS message, using event directly: {e}")
+
     # Parse time range from event or use defaults
     time_range = parse_time_range_from_event(event)
     start_timestamp, end_timestamp = time_range
@@ -47,23 +61,33 @@ def lambda_handler(event, context):
         league_id = league['id']
         league_name = league['name']
         country = league['country']
-        
+
         print(f"Processing league: {league_name} (ID: {league_id})")
-        
+
         try:
-            # Get fixtures from API that finished in the time range
-            api_fixtures = get_fixtures_goals(league_id, start_timestamp, end_timestamp)
-            
-            if not api_fixtures:
+            # Get existing records from DynamoDB FIRST (database-first approach)
+            db_records = query_dynamodb_records(country, league_name, start_timestamp, end_timestamp)
+
+            if not db_records:
+                print(f"No fixtures in database for {league_name} in time range")
+                continue
+
+            # Extract fixture IDs from database records
+            fixture_ids = [record['fixture_id'] for record in db_records]
+            print(f"Found {len(fixture_ids)} fixtures in database for {league_name}")
+
+            # Get goals for these specific fixtures from API
+            goals_dict = get_fixtures_goals_by_ids(fixture_ids)
+
+            if not goals_dict:
                 print(f"No finished fixtures found for {league_name}")
                 continue
-            
-            # Get existing records from DynamoDB
-            db_records = query_dynamodb_records(country, league_name, start_timestamp, end_timestamp)
-            
+
+            print(f"Found {len(goals_dict)} finished fixtures from API for {league_name}")
+
             # Process fixture updates
             league_result = process_league_fixtures(
-                league_id, league_name, country, api_fixtures, db_records
+                league_id, league_name, country, goals_dict, db_records
             )
             
             results['league_results'].append(league_result)
@@ -92,48 +116,46 @@ def lambda_handler(event, context):
     }
 
 
-def process_league_fixtures(league_id, league_name, country, api_fixtures, db_records):
+def process_league_fixtures(league_id, league_name, country, goals_dict, db_records):
     """
     Process fixtures for a specific league, updating scores and match data.
-    
+
     Args:
         league_id: League identifier
         league_name: League name
         country: Country name
-        api_fixtures: List of fixtures from API with goals
+        goals_dict: Dictionary mapping fixture_id -> goal data from API
         db_records: List of existing records from DynamoDB
-        
+
     Returns:
         Dictionary with processing results for the league
     """
     updated_count = 0
     failed_count = 0
     fixture_results = []
-    
+
     # Create lookup for existing records
     db_lookup = {record['fixture_id']: record for record in db_records}
-    
-    for api_fixture in api_fixtures:
-        fixture_id = api_fixture['fixture_id']
-        home_goals = api_fixture['home_goals']
-        away_goals = api_fixture['away_goals']
-        status = api_fixture.get('status', 'FT')
-        
+
+    # Iterate through finished fixtures from API
+    for fixture_id, goal_data in goals_dict.items():
+        home_goals = goal_data['home']
+        away_goals = goal_data['away']
+        halftime_home = goal_data.get('halftime_home')
+        halftime_away = goal_data.get('halftime_away')
+        status = goal_data.get('status', 'FT')
+
         try:
             # Check if we have this fixture in our database
             if fixture_id in db_lookup:
                 db_record = db_lookup[fixture_id]
-                
+
                 # Check if scores need updating (check nested goals structure for backwards compatibility)
-                goals_dict = db_record.get('goals', {})
-                current_home = goals_dict.get('home') if goals_dict else None
-                current_away = goals_dict.get('away') if goals_dict else None
-                
+                goals_obj = db_record.get('goals', {})
+                current_home = goals_obj.get('home') if goals_obj else None
+                current_away = goals_obj.get('away') if goals_obj else None
+
                 if current_home != home_goals or current_away != away_goals:
-                    # Extract halftime scores from API if available
-                    halftime_home = api_fixture.get('halftime_home')
-                    halftime_away = api_fixture.get('halftime_away')
-                    
                     # Update scores with nested structure (backwards compatible)
                     success = update_fixture_scores(
                         fixture_id,
@@ -142,17 +164,17 @@ def process_league_fixtures(league_id, league_name, country, api_fixtures, db_re
                         halftime_home,
                         halftime_away
                     )
-                    
+
                     if success:
                         print(f"Updated fixture {fixture_id}: {home_goals}-{away_goals}")
                         if halftime_home is not None and halftime_away is not None:
                             print(f"  Halftime: {halftime_home}-{halftime_away}")
-                        
+
                         # Collect additional match data if enabled
-                        enhanced_data = collect_enhanced_match_data(fixture_id, api_fixture)
+                        enhanced_data = collect_enhanced_match_data(fixture_id, goal_data)
                         if enhanced_data:
                             update_enhanced_match_data(fixture_id, enhanced_data)
-                        
+
                         updated_count += 1
                         fixture_results.append({
                             'fixture_id': fixture_id,
@@ -175,14 +197,14 @@ def process_league_fixtures(league_id, league_name, country, api_fixtures, db_re
                         'score': f"{home_goals}-{away_goals}"
                     })
             else:
-                # Fixture not found in database
-                print(f"Fixture {fixture_id} not found in database")
+                # This should never happen since we queried by fixture IDs from our database
+                print(f"WARNING: Fixture {fixture_id} returned by API but not in our database lookup")
                 fixture_results.append({
                     'fixture_id': fixture_id,
-                    'status': 'not_found',
+                    'status': 'not_in_db',
                     'score': f"{home_goals}-{away_goals}"
                 })
-                
+
         except Exception as e:
             print(f"Error processing fixture {fixture_id}: {e}")
             failed_count += 1
@@ -191,70 +213,59 @@ def process_league_fixtures(league_id, league_name, country, api_fixtures, db_re
                 'status': 'error',
                 'error': str(e)
             })
-    
+
     return {
         'league_id': league_id,
         'league_name': league_name,
         'country': country,
         'status': 'completed',
-        'total_fixtures': len(api_fixtures),
+        'total_fixtures': len(goals_dict),
         'updated_count': updated_count,
         'failed_count': failed_count,
         'fixtures': fixture_results
     }
 
 
-def collect_enhanced_match_data(fixture_id, api_fixture):
+def collect_enhanced_match_data(fixture_id, goal_data):
     """
     Collect enhanced match statistics beyond basic scores.
     This supports the enhanced data collection for Phase 4+ tactical analysis.
-    
+
     Args:
         fixture_id: Fixture identifier
-        api_fixture: Basic fixture data from API (may contain halftime scores and statistics)
-        
+        goal_data: Goal data dictionary from API (contains home, away, halftime scores, status)
+
     Returns:
         Dictionary with enhanced match data or None if not available
     """
     try:
-        # Extract halftime scores if available in API fixture
-        halftime_home = api_fixture.get('halftime_home')
-        halftime_away = api_fixture.get('halftime_away')
-        
-        # Build enhanced data structure
+        # For now, we only have basic goal data from the get_fixtures_goals function
+        # Enhanced statistics would require additional API calls to the /fixtures/statistics endpoint
+
+        # Build minimal enhanced data structure with what we have
         enhanced_data = {
             'match_statistics': {
-                'shots': {'home': api_fixture.get('shots_home'), 'away': api_fixture.get('shots_away')},
-                'shots_on_target': {'home': api_fixture.get('shots_on_target_home'), 'away': api_fixture.get('shots_on_target_away')},
-                'possession': {'home': api_fixture.get('possession_home'), 'away': api_fixture.get('possession_away')},
-                'passes': {'home': api_fixture.get('passes_home'), 'away': api_fixture.get('passes_away')},
-                'pass_accuracy': {'home': api_fixture.get('pass_accuracy_home'), 'away': api_fixture.get('pass_accuracy_away')},
-                'corners': {'home': api_fixture.get('corners_home'), 'away': api_fixture.get('corners_away')},
-                'fouls': {'home': api_fixture.get('fouls_home'), 'away': api_fixture.get('fouls_away')},
-                'yellow_cards': {'home': api_fixture.get('yellow_cards_home'), 'away': api_fixture.get('yellow_cards_away')},
-                'red_cards': {'home': api_fixture.get('red_cards_home'), 'away': api_fixture.get('red_cards_away')}
+                'shots': {'home': None, 'away': None},
+                'shots_on_target': {'home': None, 'away': None},
+                'possession': {'home': None, 'away': None},
+                'passes': {'home': None, 'away': None},
+                'pass_accuracy': {'home': None, 'away': None},
+                'corners': {'home': None, 'away': None},
+                'fouls': {'home': None, 'away': None},
+                'yellow_cards': {'home': None, 'away': None},
+                'red_cards': {'home': None, 'away': None}
             },
             'collected_at': int(datetime.now().timestamp())
         }
-        
-        # Check if we have any actual statistics (not all None)
-        has_stats = any(
-            val is not None
-            for stat_dict in enhanced_data['match_statistics'].values()
-            for val in stat_dict.values()
-        )
-        
-        # Only return enhanced data if we have actual statistics
-        if has_stats:
-            return enhanced_data
-        
+
         # In a full implementation, this would make additional API calls to:
-        # 1. Get detailed match statistics from statistics endpoint
+        # 1. Get detailed match statistics from /fixtures/statistics endpoint
         # 2. Get player statistics if needed
         # 3. Get formation and tactical data
-        
+        # For now, return None since we don't have enhanced stats yet
+
         return None
-        
+
     except Exception as e:
         print(f"Error collecting enhanced data for fixture {fixture_id}: {e}")
         return None

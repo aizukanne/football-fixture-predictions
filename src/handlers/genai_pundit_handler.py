@@ -22,7 +22,7 @@ from ..services.parameter_extraction_service import (
     get_parameter_summary
 )
 from ..services.genai_analysis_service import GenAIAnalysisService
-from ..utils.converters import convert_for_dynamodb
+from ..utils.converters_lite import convert_for_dynamodb, decimal_to_float
 
 # Initialize DynamoDB tables
 dynamodb = boto3.resource('dynamodb')
@@ -200,12 +200,24 @@ def get_team_standing(home_team_id: int, away_team_id: int, league_id: int, seas
             return {}, {}
         
         data = response.json()
+        print(f"Standings API response structure: {list(data.keys())}")
+        
         if "response" not in data or not data["response"]:
             print("No standings data found")
             return {}, {}
         
+        print(f"Response data contains {len(data['response'])} items")
+        print(f"First response structure: {list(data['response'][0].keys())}")
+        
         standings_list = data["response"][0]["league"]["standings"][0]
         league_name = data["response"][0]["league"]["name"]
+        
+        print(f"League: {league_name}, Total teams in standings: {len(standings_list)}")
+        print(f"Looking for home_team_id={home_team_id}, away_team_id={away_team_id}")
+        
+        # Log all team IDs in standings for debugging
+        all_team_ids = [standing.get("team", {}).get("id") for standing in standings_list]
+        print(f"All team IDs in standings: {all_team_ids[:10]}...")  # First 10 for brevity
         
         total_teams = len(standings_list)
         home_data = None
@@ -418,13 +430,18 @@ def handle_post_request(event: dict, cors_headers: dict, context: Any) -> dict:
             
             if status == 'COMPLETED':
                 print(f"Completed analysis found for fixture ID: {fixture_id}")
+                # Convert Decimal objects to float for JSON serialization
+                generation_time = existing_analysis.get('generation_time_ms')
+                if generation_time is not None:
+                    generation_time = decimal_to_float(generation_time)
+                
                 return {
                     'statusCode': 200,
                     'headers': cors_headers,
                     'body': json.dumps({
                         'analysis': existing_analysis['text'],
                         'provider': existing_analysis.get('ai_provider', 'unknown'),
-                        'generation_time_ms': existing_analysis.get('generation_time_ms')
+                        'generation_time_ms': generation_time
                     }, ensure_ascii=False)
                 }
             elif status == 'IN_PROGRESS':
@@ -519,15 +536,20 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
         
         print(f"Home team: {home_team_id}, Away team: {away_team_id}, League: {league_id}")
         
-        # 3. Fetch weather data
-        venue_city = fixture_data.get('venue', {}).get('city', '')
-        timestamp = fixture_data.get('timestamp', 0)
+        # 3. Fetch weather data - check multiple possible venue paths
+        venue_info = fixture_data.get('venue', {})
+        venue_city = venue_info.get('city') or venue_info.get('name', '').split(',')[0].strip()
+        timestamp = fixture_data.get('timestamp') or fixture_data.get('fixture', {}).get('timestamp', 0)
+        
+        print(f"Venue info: {venue_info}")
+        print(f"Extracted venue_city: {venue_city}, timestamp: {timestamp}")
+        
         weather_data = {}
         if venue_city and timestamp:
             print(f"Fetching weather for {venue_city} at timestamp {timestamp}")
             weather_data = get_weather_forecast(timestamp, venue_city)
         else:
-            print("Warning: No venue city or timestamp found for weather fetch")
+            print(f"Warning: No venue city or timestamp found. Venue data: {venue_info}, Timestamp: {timestamp}")
         
         # 4. Fetch team standings
         home_standings, away_standings = get_team_standing(
@@ -632,17 +654,28 @@ def get_fixture(fixture_id: int) -> Optional[dict]:
 
 
 def get_team_parameters(league_id: int, team_id: int) -> Optional[dict]:
-    """Get team parameters from database."""
+    """
+    Get team parameters from database using modern composite key structure.
+    
+    Modern football_team_parameters_prod table uses:
+    - Partition key: league_id (Number)
+    - Sort key: team_id (Number)
+    """
     try:
-        unique_id = f"{league_id}-{team_id}"
+        print(f"Querying team parameters: league_id={league_id}, team_id={team_id}")
         response = teams_table.query(
-            KeyConditionExpression=Key('id').eq(unique_id),
+            KeyConditionExpression=Key('league_id').eq(league_id) & Key('team_id').eq(team_id),
             Limit=1
         )
         items = response.get('Items', [])
-        return items[0] if items else None
+        if items:
+            print(f"Found team parameters for team {team_id}")
+            return items[0]
+        else:
+            print(f"No team parameters found for league {league_id}, team {team_id}")
+            return None
     except Exception as e:
-        print(f"Error fetching team parameters for {league_id}-{team_id}: {e}")
+        print(f"Error fetching team parameters for league {league_id}, team {team_id}: {e}")
         return None
 
 

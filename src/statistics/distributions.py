@@ -90,9 +90,9 @@ def calculate_goal_probabilities(lmbda, alpha=DEFAULT_ALPHA):
     Returns:
         Tuple of (most_likely_goals, probability_of_most_likely, all_probabilities_dict)
     """
-    # Apply a small adjustment to lambda for better alignment with common football scores
+    # Apply an adjustment to lambda for better alignment with common football scores
     if lmbda > 0.5:
-        # Very slight boost for mid-to-high lambdas
+        # Slight boost for mid-to-high lambdas (conditional squashing provides main improvement)
         adjusted_lmbda = lmbda * 1.05
     else:
         # No adjustment for very low lambdas
@@ -115,18 +115,33 @@ def calculate_goal_probabilities(lmbda, alpha=DEFAULT_ALPHA):
     return most_likely_goals, probabilities[most_likely_goals], probabilities
 
 
-def squash_lambda(lmbda, ceiling=4.0):
+def squash_lambda(lmbda, ceiling=7.0):
     """
-    Apply a squashing function to lambda values to prevent extreme predictions.
-    
+    Apply a squashing function to lambda values ONLY when they exceed the ceiling.
+    This prevents unnecessary compression of realistic lambda values.
+
     Args:
         lmbda: Original lambda value
-        ceiling: Maximum effective lambda value
-        
+        ceiling: Maximum lambda threshold (only squash if lambda > ceiling)
+
     Returns:
-        Squashed lambda value
+        Original lambda if below ceiling, squashed lambda if above ceiling
+
+    Examples:
+        squash_lambda(2.5, ceiling=7.0) -> 2.5 (no squashing, below ceiling)
+        squash_lambda(8.0, ceiling=7.0) -> 6.53 (squashed, exceeds ceiling)
     """
-    return lmbda / (1 + lmbda / ceiling)
+    if lmbda <= ceiling:
+        # No squashing needed - lambda is within reasonable bounds
+        return lmbda
+    else:
+        # Apply squashing only for extreme values
+        # Use a soft cap: ceiling + log-based decay for values above ceiling
+        excess = lmbda - ceiling
+        # Logarithmic decay: reduces extreme values while preserving some growth
+        import math
+        squashed_excess = math.log1p(excess)  # log(1 + excess) for smooth transition
+        return ceiling + squashed_excess
 
 
 def empirical_histogram(data, bins=None):

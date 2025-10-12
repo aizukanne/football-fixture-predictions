@@ -571,16 +571,19 @@ def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEF
 def get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries=DEFAULT_MAX_RETRIES):
     """
     Fetch fixture goals for a specific league within a time range.
-    Enhanced version from checkScores.py functionality.
-    
+    Used by tactical_analyzer and team_classifier for analytics on historical matches.
+
+    Returns ALL finished matches from the API for the league/timerange, regardless of
+    whether they exist in our database. This is for parameter calculation and analytics.
+
     Args:
         league_id: League identifier
         start_timestamp: Start timestamp
         end_timestamp: End timestamp
         max_retries: Maximum retry attempts
-        
+
     Returns:
-        List of fixture data with goals
+        List of fixture dictionaries with full details (teams, goals, fixture metadata)
     """
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
     params = {
@@ -588,23 +591,82 @@ def get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries=DE
         "from": datetime.fromtimestamp(start_timestamp).strftime('%Y-%m-%d'),
         "to": datetime.fromtimestamp(end_timestamp).strftime('%Y-%m-%d')
     }
-    
+
     data = _make_api_request(url, params, max_retries=max_retries)
-    
+
     if not data or "response" not in data:
         return []
-    
+
     fixtures = []
     for fixture in data["response"]:
-        if fixture["goals"]["home"] is not None and fixture["goals"]["away"] is not None:
-            fixtures.append({
-                "fixture_id": fixture["fixture"]["id"],
-                "home_goals": fixture["goals"]["home"],
-                "away_goals": fixture["goals"]["away"],
-                "status": fixture["fixture"]["status"]["short"]
-            })
-    
+        # Only include finished matches with valid goals
+        status = fixture["fixture"]["status"]["short"]
+        if status in ["FT", "AET", "PEN", "FT_PEN"]:
+            if fixture["goals"]["home"] is not None and fixture["goals"]["away"] is not None:
+                fixtures.append({
+                    "fixture_id": fixture["fixture"]["id"],
+                    "home_goals": fixture["goals"]["home"],
+                    "away_goals": fixture["goals"]["away"],
+                    "status": status,
+                    "teams": fixture.get("teams", {}),
+                    "league": fixture.get("league", {}),
+                    "fixture": fixture.get("fixture", {}),
+                    "goals": fixture.get("goals", {}),
+                    "score": fixture.get("score", {})
+                })
+
     return fixtures
+
+
+def get_fixtures_goals_by_ids(fixture_ids, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Fetch goals for a list of specific fixture IDs from the API.
+    Used by match_data_handler for score checking on fixtures we've already predicted.
+
+    This is the database-first approach: query DB for fixture IDs first, then fetch
+    only those specific fixtures from the API. More efficient than querying by date range.
+
+    Args:
+        fixture_ids: List of fixture IDs to fetch goals for
+        max_retries: Maximum retry attempts
+
+    Returns:
+        Dictionary mapping fixture_id -> {home: int, away: int, halftime_home: int, halftime_away: int, status: str}
+    """
+    if not fixture_ids:
+        return {}
+
+    url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+    goals_dict = {}
+
+    # Process fixture_ids in batches of 20 (API limit)
+    batch_size = 20
+    for i in range(0, len(fixture_ids), batch_size):
+        batch = fixture_ids[i:i + batch_size]
+        ids_str = '-'.join(map(str, batch))
+        params = {"ids": ids_str}
+
+        data = _make_api_request(url, params, max_retries=max_retries)
+
+        if not data or "response" not in data:
+            continue
+
+        # Extract goal data for each fixture
+        for fixture in data["response"]:
+            fixture_id = fixture["fixture"]["id"]
+            status = fixture["fixture"]["status"]["short"]
+
+            # Only include finished matches
+            if status in ["FT", "AET", "PEN", "FT_PEN"]:
+                goals_dict[fixture_id] = {
+                    "home": fixture["goals"]["home"],
+                    "away": fixture["goals"]["away"],
+                    "halftime_home": fixture.get("score", {}).get("halftime", {}).get("home"),
+                    "halftime_away": fixture.get("score", {}).get("halftime", {}).get("away"),
+                    "status": status
+                }
+
+    return goals_dict
 
 
 def get_next_fixture(team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIES):
@@ -804,6 +866,9 @@ class APIClient:
     
     def get_fixtures_goals(self, league_id, start_timestamp, end_timestamp, max_retries=DEFAULT_MAX_RETRIES):
         return get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries)
+
+    def get_fixtures_goals_by_ids(self, fixture_ids, max_retries=DEFAULT_MAX_RETRIES):
+        return get_fixtures_goals_by_ids(fixture_ids, max_retries)
     
     def get_next_fixture(self, team_id, current_fixture_id, max_retries=DEFAULT_MAX_RETRIES):
         return get_next_fixture(team_id, current_fixture_id, max_retries)
