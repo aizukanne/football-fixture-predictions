@@ -189,6 +189,7 @@ def put_fixture_record(fixture_record):
 def query_dynamodb_records(country, league_name, start_time, end_time):
     """
     Query DynamoDB records for a specific league within a time range.
+    Uses the country-league-index GSI for efficient querying.
     Originally from checkScores.py.
     
     Args:
@@ -201,13 +202,27 @@ def query_dynamodb_records(country, league_name, start_time, end_time):
         List of matching records
     """
     try:
-        # Query using GSI if available, otherwise scan with filters
-        response = webFE_table.scan(
-            FilterExpression=Key('timestamp').between(start_time, end_time) & 
-                           Key('country').eq(country) & 
-                           Key('league').eq(league_name)
+        # Use GSI to query by country and league (much more efficient than scan)
+        response = webFE_table.query(
+            IndexName='country-league-index',
+            KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
+            FilterExpression=Key('timestamp').between(start_time, end_time)
         )
-        return response.get('Items', [])
+        
+        items = response.get('Items', [])
+        
+        # Handle pagination if needed
+        while 'LastEvaluatedKey' in response:
+            response = webFE_table.query(
+                IndexName='country-league-index',
+                KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
+                FilterExpression=Key('timestamp').between(start_time, end_time),
+                ExclusiveStartKey=response['LastEvaluatedKey']
+            )
+            items.extend(response.get('Items', []))
+        
+        return items
+        
     except Exception as e:
         print(f"Error querying DynamoDB records: {e}")
         return []
@@ -277,6 +292,7 @@ def fetch_league_parameters(league_id, season=None):
 def fetch_league_fixtures(country, league_name, start_time, end_time):
     """
     Fetch historical fixtures for a league from DynamoDB.
+    Uses the country-league-index GSI for efficient querying.
     Used for multiplier calculations.
     
     Args:
@@ -289,15 +305,31 @@ def fetch_league_fixtures(country, league_name, start_time, end_time):
         List of fixture records
     """
     try:
-        # Use scan with filters - in production, consider using GSI for better performance
-        response = webFE_table.scan(
-            FilterExpression=Key('timestamp').between(start_time, end_time) &
-                           Key('country').eq(country) &
-                           Key('league').eq(league_name),
+        # Use GSI to query by country and league (much more efficient than scan)
+        response = webFE_table.query(
+            IndexName='country-league-index',
+            KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
+            FilterExpression=Key('timestamp').between(start_time, end_time),
             ProjectionExpression='fixture_id, home, away, predictions, alternate_predictions, #date, #timestamp',
             ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'}
         )
-        return response.get('Items', [])
+        
+        items = response.get('Items', [])
+        
+        # Handle pagination if needed
+        while 'LastEvaluatedKey' in response:
+            response = webFE_table.query(
+                IndexName='country-league-index',
+                KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
+                FilterExpression=Key('timestamp').between(start_time, end_time),
+                ProjectionExpression='fixture_id, home, away, predictions, alternate_predictions, #date, #timestamp',
+                ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'},
+                ExclusiveStartKey=response['LastEvaluatedKey']
+            )
+            items.extend(response.get('Items', []))
+        
+        return items
+        
     except Exception as e:
         print(f"Error fetching league fixtures: {e}")
         return []
