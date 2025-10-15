@@ -1277,6 +1277,7 @@ def get_neutral_temporal_params() -> Dict:
 def get_neutral_tactical_params() -> Dict:
     """
     Get neutral tactical parameters when tactical analysis is not available.
+    Includes default manager profile fields for consistency.
 
     Returns:
         Dictionary with neutral tactical parameters (no tactical adjustments)
@@ -1301,8 +1302,19 @@ def get_neutral_tactical_params() -> Dict:
         'formation_attacking_bonus': Decimal('1.0'),
         'formation_defensive_bonus': Decimal('1.0'),
 
+        # Manager profile defaults (neutral/unknown)
+        'manager_name': 'Unknown',
+        'manager_experience': 0,
+        'manager_tactical_philosophy': 'balanced',
+        'manager_preferred_system': '4-4-2',
+        'manager_formation_preferences': {},
+        'manager_tactical_flexibility': Decimal('0.5'),
+        'manager_tactical_rigidity': Decimal('0.5'),
+        'manager_big_game_approach': 'standard',
+        'manager_profile_available': False,
+
         # Tactical analysis metadata
-        'tactical_version': '4.0',
+        'tactical_version': '4.1',
         'analysis_timestamp': int(datetime.now().timestamp()),
         'tactical_features_enabled': False,
         'formations_analyzed': 0
@@ -1313,6 +1325,7 @@ def calculate_tactical_parameters(team_id: int, league_id: int, season: int,
                                   prediction_date: datetime) -> Dict:
     """
     Calculate tactical parameters for a team using Phase 4 tactical intelligence.
+    Now includes manager/coach analysis for comprehensive tactical profiling.
 
     Args:
         team_id: Team identifier
@@ -1322,7 +1335,7 @@ def calculate_tactical_parameters(team_id: int, league_id: int, season: int,
 
     Returns:
         Dictionary with tactical parameters including formation preferences,
-        tactical style scores, and formation effectiveness metrics
+        tactical style scores, formation effectiveness metrics, and manager profile
     """
     try:
         # Initialize tactical analyzer
@@ -1341,6 +1354,37 @@ def calculate_tactical_parameters(team_id: int, league_id: int, season: int,
         formation_effectiveness = formation_analyzer.analyze_formation_effectiveness(
             team_id, preferred_formation, league_id, season
         )
+
+        # NEW: Get manager tactical profile
+        manager_profile = tactical_analyzer.get_manager_tactical_profile(team_id, league_id, season)
+
+        # Extract key manager metrics for easy access
+        manager_data = {}
+        if manager_profile and manager_profile.get('preferred_system') != '4-4-2':  # Not default
+            manager_data = {
+                'manager_name': manager_profile.get('manager_name', 'Unknown'),
+                'manager_experience': manager_profile.get('experience_years', 0),
+                'manager_tactical_philosophy': manager_profile.get('tactical_philosophy', 'balanced'),
+                'manager_preferred_system': manager_profile.get('preferred_system', '4-4-2'),
+                'manager_formation_preferences': manager_profile.get('formation_preferences', {}),
+                'manager_tactical_flexibility': manager_profile.get('tactical_flexibility', Decimal('0.5')),
+                'manager_tactical_rigidity': manager_profile.get('tactical_rigidity', Decimal('0.5')),
+                'manager_big_game_approach': manager_profile.get('big_game_approach', 'standard'),
+                'manager_profile_available': True
+            }
+        else:
+            # Default/unavailable manager data
+            manager_data = {
+                'manager_name': 'Unknown',
+                'manager_experience': 0,
+                'manager_tactical_philosophy': 'balanced',
+                'manager_preferred_system': '4-4-2',
+                'manager_formation_preferences': {},
+                'manager_tactical_flexibility': Decimal('0.5'),
+                'manager_tactical_rigidity': Decimal('0.5'),
+                'manager_big_game_approach': 'standard',
+                'manager_profile_available': False
+            }
 
         return {
             'preferred_formation': preferred_formation,
@@ -1362,8 +1406,11 @@ def calculate_tactical_parameters(team_id: int, league_id: int, season: int,
             'formation_attacking_bonus': Decimal(str(formation_effectiveness.get('attacking_bonus', 1.0))),
             'formation_defensive_bonus': Decimal(str(formation_effectiveness.get('defensive_bonus', 1.0))),
 
+            # NEW: Manager profile data
+            **manager_data,
+
             # Tactical analysis metadata
-            'tactical_version': '4.0',
+            'tactical_version': '4.1',  # Updated version to reflect manager integration
             'analysis_timestamp': int(prediction_date.timestamp()),
             'tactical_features_enabled': True,
             'formations_analyzed': formation_prefs.get('formations_count', 1)

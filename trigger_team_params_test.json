@@ -1,0 +1,8 @@
+{
+  "trigger_type": "manual",
+  "league_filter": {
+    "league_ids": [39]
+  },
+  "force_recompute": true,
+  "dry_run": false
+}

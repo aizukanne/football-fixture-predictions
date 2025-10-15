@@ -1,0 +1,5 @@
+{
+  "trigger_type": "manual",
+  "force_recompute": true,
+  "dry_run": false
+}

@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Tuple, Union
 from decimal import Decimal
 from datetime import datetime, timedelta
 import boto3
-from statistics import mean, stdev
+import statistics as stats  # Use alias to avoid conflict with local statistics module
 import math
 from collections import defaultdict, Counter
 import logging
@@ -120,7 +120,7 @@ class TacticalAnalyzer:
             tactical_consistency = most_used_frequency  # Higher = more consistent
             
             # Average formation changes per game
-            avg_changes = Decimal(str(mean(formation_changes))) if formation_changes else Decimal('0')
+            avg_changes = Decimal(str(stats.mean(formation_changes))) if formation_changes else Decimal('0')
             
             return {
                 'primary_formation': primary_formation,
@@ -314,8 +314,8 @@ class TacticalAnalyzer:
             
             wing_play_preference = Decimal(str(wing_attacks / max(total_attacks, 1)))
             
-            crosses_per_game = Decimal(str(mean([match.get('crosses', 0) for match in matches])))
-            through_balls_per_game = Decimal(str(mean([match.get('through_balls', 0) for match in matches])))
+            crosses_per_game = Decimal(str(stats.mean([match.get('crosses', 0) for match in matches])))
+            through_balls_per_game = Decimal(str(stats.mean([match.get('through_balls', 0) for match in matches])))
             
             long_passes = sum(match.get('long_passes', 0) for match in matches)
             short_passes = sum(match.get('short_passes', 0) for match in matches)
@@ -337,8 +337,8 @@ class TacticalAnalyzer:
             # Analyze pressing triggers (simplified - would need more detailed data)
             pressing_triggers = ['losing_possession', 'opponent_buildup', 'set_pieces']
             
-            defensive_width = Decimal(str(mean([match.get('defensive_width', 50) for match in matches]) / 100))
-            counter_press_intensity = Decimal(str(mean([match.get('counter_presses', 5) for match in matches]) / 10))
+            defensive_width = Decimal(str(stats.mean([match.get('defensive_width', 50) for match in matches]) / 100))
+            counter_press_intensity = Decimal(str(stats.mean([match.get('counter_presses', 5) for match in matches]) / 10))
             
             defensive_patterns = {
                 'high_line_frequency': high_line_frequency,
@@ -348,8 +348,8 @@ class TacticalAnalyzer:
             }
             
             # Analyze transition speed
-            attack_transition = Decimal(str(mean([match.get('def_to_att_time', 8) for match in matches])))
-            defense_transition = Decimal(str(mean([match.get('att_to_def_time', 6) for match in matches])))
+            attack_transition = Decimal(str(stats.mean([match.get('def_to_att_time', 8) for match in matches])))
+            defense_transition = Decimal(str(stats.mean([match.get('att_to_def_time', 6) for match in matches])))
             
             # Normalize to 0-1 scale (lower times = higher speed scores)
             attack_transition_score = max(Decimal('0'), Decimal('1') - (attack_transition / Decimal('15')))
@@ -398,7 +398,7 @@ class TacticalAnalyzer:
                 return self._get_default_flexibility_analysis()
             
             # Calculate average formation changes
-            formation_changes = mean([match.get('formation_changes', 0) for match in matches])
+            formation_changes = stats.mean([match.get('formation_changes', 0) for match in matches])
             
             # Analyze substitution impact
             sub_impacts = []
@@ -409,7 +409,7 @@ class TacticalAnalyzer:
                     impact = (post_sub_performance - pre_sub_performance) / pre_sub_performance
                     sub_impacts.append(impact)
             
-            substitution_impact = Decimal(str(mean(sub_impacts) if sub_impacts else 0))
+            substitution_impact = Decimal(str(stats.mean(sub_impacts) if sub_impacts else 0))
             
             # Analyze game state adaptation
             leading_approaches = []
@@ -482,9 +482,9 @@ class TacticalAnalyzer:
             preferred_system = Counter(formations).most_common(1)[0][0]
             
             # Analyze tactical philosophy based on avg stats
-            goals_for = mean([match.get('goals_for', 0) for match in matches])
-            goals_against = mean([match.get('goals_against', 0) for match in matches])
-            shots_for = mean([match.get('shots_for', 0) for match in matches])
+            goals_for = stats.mean([match.get('goals_for', 0) for match in matches])
+            goals_against = stats.mean([match.get('goals_against', 0) for match in matches])
+            shots_for = stats.mean([match.get('shots_for', 0) for match in matches])
             
             if goals_for > 2.0 and shots_for > 15:
                 philosophy = 'attacking'
@@ -495,7 +495,7 @@ class TacticalAnalyzer:
             
             # Calculate substitution timing
             sub_timings = [match.get('first_sub_minute', 60) for match in matches if match.get('first_sub_minute')]
-            substitution_timing = Decimal(str(mean(sub_timings) if sub_timings else 60))
+            substitution_timing = Decimal(str(stats.mean(sub_timings) if sub_timings else 60))
             
             # Calculate tactical rigidity (inverse of formation variety)
             unique_formations = len(set(formations))
@@ -506,7 +506,7 @@ class TacticalAnalyzer:
             # Determine big game approach (against top opponents)
             big_games = [match for match in matches if match.get('opponent_strength', 'middle') == 'strong']
             if big_games:
-                big_game_goals = mean([match.get('goals_for', 0) for match in big_games])
+                big_game_goals = stats.mean([match.get('goals_for', 0) for match in big_games])
                 big_game_approach = 'attacking' if big_game_goals > 1.5 else 'cautious'
             else:
                 big_game_approach = 'balanced'

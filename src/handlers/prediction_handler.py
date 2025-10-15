@@ -32,6 +32,7 @@ from ..data.database_client import (
 from ..parameters.team_calculator import calculate_team_points
 from ..utils.converters import convert_floats_to_decimal, decimal_default, decimal_to_float
 from ..utils.constants import BEST_BETS_QUEUE_URL
+from ..utils.manager_multipliers import apply_manager_adjustments, get_opponent_tier_from_standings
 
 
 def lambda_handler(event, context):
@@ -95,9 +96,29 @@ def process_fixtures(fixtures):
 
             home_params = decimal_to_float(home_params)
             away_params = decimal_to_float(away_params)
-            
+
             print(f'Home: {json.dumps(home_params, default=decimal_default)}')
             print(f'Away: {json.dumps(away_params, default=decimal_default)}')
+
+            # Apply manager tactical multipliers (Phase 4.1 enhancement)
+            try:
+                # Determine opponent tiers (simplified - using middle tier as default)
+                # In production, this would use actual league standings
+                home_opponent_tier = 'middle'  # Away team tier from home's perspective
+                away_opponent_tier = 'middle'  # Home team tier from away's perspective
+
+                print("=== APPLYING MANAGER TACTICAL MULTIPLIERS ===")
+                home_params, away_params = apply_manager_adjustments(
+                    home_params, away_params, home_opponent_tier, away_opponent_tier
+                )
+
+                home_multiplier = home_params.get('manager_multiplier_applied', 1.0)
+                away_multiplier = away_params.get('manager_multiplier_applied', 1.0)
+                print(f"Manager multipliers applied - Home: {home_multiplier}, Away: {away_multiplier}")
+
+            except Exception as e:
+                print(f"Warning: Could not apply manager multipliers: {e}")
+                # Continue without manager adjustments if there's an error
 
             # Get venue information
             try:
