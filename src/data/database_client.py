@@ -544,6 +544,306 @@ def health_check():
     
     return health
 
+# Module-level cache for league matches (1-hour TTL)
+_league_matches_cache = {}
+_cache_timestamps = {}
+CACHE_TTL = 3600  # 1 hour in seconds
+
+
+def _query_completed_matches_from_db(team_id, league_id, season):
+    """
+    Query completed matches from game_fixtures table for a specific team.
+    
+    Args:
+        team_id: Team identifier
+        league_id: League identifier  
+        season: Season year
+        
+    Returns:
+        List of match dictionaries from database
+    """
+    try:
+        if not webFE_table:
+            return []
+        
+        # Get league metadata for GSI query
+        from ..config.leagues_config import get_league_info
+        league_config = get_league_info(league_id)
+        if not league_config:
+            print(f"League {league_id} not found in configuration")
+            return []
+        
+        country = league_config.get('country', '')
+        league_name = league_config.get('league', '')
+        
+        # Query using country-league-index GSI
+        matches = []
+        last_evaluated_key = None
+        
+        while True:
+            query_params = {
+                'IndexName': 'country-league-index',
+                'KeyConditionExpression': Key('country').eq(country) & Key('league').eq(league_name),
+                'FilterExpression': 'attribute_exists(goals) AND season = :season AND (home.team_id = :team_id OR away.team_id = :team_id)',
+                'ExpressionAttributeValues': {
+                    ':season': season,
+                    ':team_id': team_id
+                },
+                'ProjectionExpression': 'fixture_id, home, away, goals, #ts, #dt, league_id, season',
+                'ExpressionAttributeNames': {
+                    '#ts': 'timestamp',
+                    '#dt': 'date'
+                }
+            }
+            
+            if last_evaluated_key:
+                query_params['ExclusiveStartKey'] = last_evaluated_key
+            
+            response = webFE_table.query(**query_params)
+            
+            for item in response.get('Items', []):
+                # Extract match data
+                home_data = item.get('home', {})
+                away_data = item.get('away', {})
+                goals = item.get('goals', {})
+                
+                match = {
+                    'fixture_id': int(item.get('fixture_id', 0)),
+                    'home_team_id': int(home_data.get('team_id', 0)),
+                    'away_team_id': int(away_data.get('team_id', 0)),
+                    'home_goals': int(goals.get('home', 0)),
+                    'away_goals': int(goals.get('away', 0)),
+                    'timestamp': int(item.get('timestamp', 0)),
+                    'date': item.get('date', ''),
+                    'league_id': int(item.get('league_id', league_id)),
+                    'season': int(item.get('season', season))
+                }
+                matches.append(match)
+            
+            last_evaluated_key = response.get('LastEvaluatedKey')
+            if not last_evaluated_key:
+                break
+        
+        print(f"Found {len(matches)} completed matches in DB for team {team_id}")
+        return matches
+        
+    except Exception as e:
+        print(f"Error querying completed matches from DB: {e}")
+        return []
+
+
+def _fetch_league_matches_cached(league_id, season):
+    """
+    Fetch all matches for a league from API with league-level caching.
+    
+    Args:
+        league_id: League identifier
+        season: Season year
+        
+    Returns:
+        List of all league matches (cached for 1 hour)
+    """
+    try:
+        cache_key = f"league_{league_id}_season_{season}"
+        current_time = datetime.now().timestamp()
+        
+        # Check if cache exists and is fresh
+        if cache_key in _league_matches_cache:
+            cache_time = _cache_timestamps.get(cache_key, 0)
+            if current_time - cache_time < CACHE_TTL:
+                print(f"Cache hit for {cache_key}")
+                return _league_matches_cache[cache_key]
+        
+        # Fetch from API
+        print(f"Fetching league matches from API for league {league_id}, season {season}")
+        from .api_client import get_fixtures_goals
+        
+        # Calculate season date range
+        season_start = datetime(season, 8, 1)
+        season_end = datetime.now()
+        
+        start_ts = int(season_start.timestamp())
+        end_ts = int(season_end.timestamp())
+        
+        # Get all fixtures for the league
+        api_fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
+        
+        if not api_fixtures:
+            print(f"No fixtures returned from API for league {league_id}")
+            return []
+        
+        # Convert API format to standardized format
+        matches = []
+        for fixture in api_fixtures:
+            if not isinstance(fixture, dict):
+                continue
+            
+            fixture_data = fixture.get('fixture', {})
+            teams = fixture.get('teams', {})
+            goals = fixture.get('goals', {})
+            league_data = fixture.get('league', {})
+            
+            home_team = teams.get('home', {})
+            away_team = teams.get('away', {})
+            
+            # Only include completed matches with goals
+            if goals.get('home') is None or goals.get('away') is None:
+                continue
+            
+            match = {
+                'fixture_id': int(fixture_data.get('id', 0)),
+                'home_team_id': int(home_team.get('id', 0)),
+                'away_team_id': int(away_team.get('id', 0)),
+                'home_goals': int(goals.get('home', 0)),
+                'away_goals': int(goals.get('away', 0)),
+                'timestamp': int(fixture_data.get('timestamp', 0)),
+                'date': fixture_data.get('date', ''),
+                'league_id': int(league_data.get('id', league_id)),
+                'season': int(league_data.get('season', season))
+            }
+            matches.append(match)
+        
+        # Store in cache
+        _league_matches_cache[cache_key] = matches
+        _cache_timestamps[cache_key] = current_time
+        
+        print(f"Cached {len(matches)} matches for {cache_key}")
+        return matches
+        
+    except Exception as e:
+        print(f"Error fetching league matches from API: {e}")
+        return []
+
+
+def _merge_match_data(db_matches, api_matches, team_id):
+    """
+    Merge DB and API match data, deduplicate, and filter for team.
+    
+    Args:
+        db_matches: Matches from database
+        api_matches: Matches from API
+        team_id: Team to filter for
+        
+    Returns:
+        Merged and filtered list of matches
+    """
+    try:
+        # Create lookup by fixture_id (prefer DB data)
+        all_matches = {m['fixture_id']: m for m in db_matches}
+        
+        # Add API matches (don't overwrite DB data)
+        for match in api_matches:
+            if match['fixture_id'] not in all_matches:
+                all_matches[match['fixture_id']] = match
+        
+        # Filter for team
+        team_matches = [
+            m for m in all_matches.values()
+            if m['home_team_id'] == team_id or m['away_team_id'] == team_id
+        ]
+        
+        # Sort by timestamp (most recent first)
+        team_matches.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+        
+        return team_matches
+        
+    except Exception as e:
+        print(f"Error merging match data: {e}")
+        return db_matches
+
+
+def get_team_matches(team_id, league_id, season=None, limit=100, min_required=5):
+    """
+    Get historical matches for a specific team with hybrid DB+API strategy.
+    
+    Implements progressive data retrieval:
+    1. Query database for completed matches (fast, free)
+    2. If insufficient, check league-level cache (fast, free)
+    3. If no cache, fetch from API and cache at league level (slow, costs quota)
+    4. Merge results and return standardized format
+    
+    Args:
+        team_id: Team identifier
+        league_id: League identifier
+        season: Season year (defaults to current year)
+        limit: Maximum number of matches to return (default: 100)
+        min_required: Minimum matches required before API fallback (default: 5)
+    
+    Returns:
+        List of match dictionaries with standardized format:
+        [
+            {
+                'fixture_id': int,
+                'home_team_id': int,
+                'away_team_id': int,
+                'home_goals': int,
+                'away_goals': int,
+                'timestamp': int,
+                'date': str,
+                'league_id': int,
+                'season': int,
+                'venue': str,  # 'home' or 'away'
+                'is_home': bool,
+                'opponent_id': int,
+                'goals_scored': int,
+                'goals_conceded': int,
+                'result': str  # 'W', 'D', or 'L'
+            },
+            ...
+        ]
+    """
+    try:
+        # Default to current year if season not provided
+        if season is None:
+            season = datetime.now().year
+        
+        print(f"Getting matches for team {team_id}, league {league_id}, season {season}")
+        
+        # Step 1: Query database for completed matches
+        db_matches = _query_completed_matches_from_db(team_id, league_id, season)
+        
+        # Step 2: Check if database data is sufficient
+        if len(db_matches) >= min_required:
+            print(f"Sufficient data in DB ({len(db_matches)} matches), using DB only")
+            matches = db_matches
+        else:
+            print(f"Insufficient DB data ({len(db_matches)} matches), fetching from API")
+            
+            # Step 3: Fetch from API with league-level caching
+            api_matches = _fetch_league_matches_cached(league_id, season)
+            
+            # Step 4: Merge DB and API data
+            matches = _merge_match_data(db_matches, api_matches, team_id)
+        
+        # Step 5: Enrich with computed fields
+        for match in matches:
+            is_home = match['home_team_id'] == team_id
+            match['is_home'] = is_home
+            match['venue'] = 'home' if is_home else 'away'
+            match['opponent_id'] = match['away_team_id'] if is_home else match['home_team_id']
+            match['goals_scored'] = match['home_goals'] if is_home else match['away_goals']
+            match['goals_conceded'] = match['away_goals'] if is_home else match['home_goals']
+            
+            # Determine result
+            if match['goals_scored'] > match['goals_conceded']:
+                match['result'] = 'W'
+            elif match['goals_scored'] < match['goals_conceded']:
+                match['result'] = 'L'
+            else:
+                match['result'] = 'D'
+        
+        # Step 6: Apply limit if specified
+        if limit and len(matches) > limit:
+            matches = matches[:limit]
+        
+        print(f"Returning {len(matches)} matches for team {team_id}")
+        return matches
+        
+    except Exception as e:
+        print(f"Error in get_team_matches: {e}")
+        return []
+
+
 
 class DatabaseClient:
     """
@@ -598,6 +898,21 @@ class DatabaseClient:
     
     def health_check(self):
         return health_check()
+    
+    def get_team_matches(self, team_id, league_id, season=None, limit=100):
+        """
+        Get historical matches for a specific team with hybrid DB+API strategy.
+        
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year (defaults to current year)
+            limit: Maximum number of matches to return (default: 100)
+        
+        Returns:
+            List of match dictionaries with standardized format
+        """
+        return get_team_matches(team_id, league_id, season, limit)
 
 
 def get_cached_fixture_events(fixture_id):

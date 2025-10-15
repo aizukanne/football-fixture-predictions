@@ -13,17 +13,8 @@ from dataclasses import dataclass
 
 # Import existing infrastructure
 from ..infrastructure.version_manager import VersionManager
-from ..data.database_client import get_team_params_from_db, get_league_params_from_db
+from ..data.database_client import get_team_params_from_db, get_league_params_from_db, DatabaseClient
 from .team_classifier import classify_team_archetype, get_archetype_prediction_weights
-
-# Simple wrapper class for compatibility
-class DatabaseClient:
-    def get_team_matches(self, team_id, league_id, season):
-        return []
-    def get_league_teams(self, league_id, season):
-        return [{'team_id': i} for i in range(1, 21)]
-    def get_league_matches(self, league_id, season):
-        return []
 
 logger = logging.getLogger(__name__)
 

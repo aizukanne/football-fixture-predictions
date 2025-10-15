@@ -46,13 +46,17 @@ class ManagerAnalyzer:
         """
         try:
             # Get current manager from API
+            print(f"Fetching coach data for team {team_id}...")
             coach_data = self.api_client.get_coach_by_team(team_id)
 
             if not coach_data:
+                print(f"No coach data found for team {team_id}")
                 logger.warning(f"No coach data found for team {team_id}")
                 return self._get_default_manager_profile()
 
-            # Extract basic manager info
+            print(f"✅ Coach data retrieved for team {team_id}: {coach_data.get('name', 'Unknown')}")
+
+            # Extract basic manager info (these are guaranteed to work)
             manager_profile = {
                 'manager_id': coach_data.get('id'),
                 'manager_name': coach_data.get('name'),
@@ -60,19 +64,10 @@ class ManagerAnalyzer:
                 'manager_nationality': coach_data.get('nationality'),
                 'manager_photo': coach_data.get('photo'),
 
-                # Experience metrics
+                # Experience metrics (from career history)
                 'experience_years': self._calculate_experience_years(coach_data.get('career', [])),
                 'teams_managed': self._count_teams_managed(coach_data.get('career', [])),
                 'top_level_experience': self._assess_top_level_experience(coach_data.get('career', [])),
-
-                # Tactical preferences (from match history)
-                'preferred_formations': self._analyze_formation_preferences(team_id, league_id, season),
-                'tactical_flexibility': self._calculate_tactical_flexibility(team_id, league_id, season),
-                'formation_consistency': self._calculate_formation_consistency(team_id, league_id, season),
-
-                # Performance patterns
-                'home_away_strategy_difference': self._analyze_home_away_strategy(team_id, league_id, season),
-                'opponent_adaptation': self._analyze_opponent_adaptation(team_id, league_id, season),
 
                 # Metadata
                 'analysis_version': '4.0',
@@ -80,10 +75,44 @@ class ManagerAnalyzer:
                 'manager_features_enabled': True
             }
 
+            # Try to add tactical preferences (from match history) - these may fail
+            try:
+                manager_profile['preferred_formations'] = self._analyze_formation_preferences(team_id, league_id, season)
+            except Exception as e:
+                print(f"Warning: Could not analyze formation preferences: {e}")
+                manager_profile['preferred_formations'] = {'most_used': '4-4-2', 'formations_count': 1}
+
+            try:
+                manager_profile['tactical_flexibility'] = self._calculate_tactical_flexibility(team_id, league_id, season)
+            except Exception as e:
+                print(f"Warning: Could not calculate tactical flexibility: {e}")
+                manager_profile['tactical_flexibility'] = Decimal('0.5')
+
+            try:
+                manager_profile['formation_consistency'] = self._calculate_formation_consistency(team_id, league_id, season)
+            except Exception as e:
+                print(f"Warning: Could not calculate formation consistency: {e}")
+                manager_profile['formation_consistency'] = Decimal('0.5')
+
+            # Try to add performance patterns
+            try:
+                manager_profile['home_away_strategy_difference'] = self._analyze_home_away_strategy(team_id, league_id, season)
+            except Exception as e:
+                print(f"Warning: Could not analyze home/away strategy: {e}")
+                manager_profile['home_away_strategy_difference'] = {'home_formation': '4-4-2', 'away_formation': '4-4-2', 'strategy_difference': 'consistent'}
+
+            try:
+                manager_profile['opponent_adaptation'] = self._analyze_opponent_adaptation(team_id, league_id, season)
+            except Exception as e:
+                print(f"Warning: Could not analyze opponent adaptation: {e}")
+                manager_profile['opponent_adaptation'] = {'adaptation_level': 'unknown'}
+
+            print(f"✅ Manager profile completed for {manager_profile.get('manager_name')}")
             return manager_profile
 
         except Exception as e:
-            logger.error(f"Error getting manager profile for team {team_id}: {e}")
+            print(f"❌ Error getting manager profile for team {team_id}: {e}")
+            logger.error(f"Error getting manager profile for team {team_id}: {e}", exc_info=True)
             return self._get_default_manager_profile()
 
     def _calculate_experience_years(self, career: List[Dict]) -> int:

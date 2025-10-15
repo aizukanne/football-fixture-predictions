@@ -1355,25 +1355,30 @@ def calculate_tactical_parameters(team_id: int, league_id: int, season: int,
             team_id, preferred_formation, league_id, season
         )
 
-        # NEW: Get manager tactical profile
-        manager_profile = tactical_analyzer.get_manager_tactical_profile(team_id, league_id, season)
+        # NEW: Get manager profile directly from ManagerAnalyzer
+        from ..features.manager_analyzer import ManagerAnalyzer
+        manager_analyzer = ManagerAnalyzer()
+        manager_profile = manager_analyzer.get_manager_profile(team_id, league_id, season)
 
         # Extract key manager metrics for easy access
         manager_data = {}
-        if manager_profile and manager_profile.get('preferred_system') != '4-4-2':  # Not default
+        # Check if we got real manager data (not defaults)
+        if manager_profile and manager_profile.get('manager_name') and manager_profile.get('manager_name') != 'Unknown':
+            print(f"✅ Using real manager data: {manager_profile.get('manager_name')}")
             manager_data = {
                 'manager_name': manager_profile.get('manager_name', 'Unknown'),
                 'manager_experience': manager_profile.get('experience_years', 0),
-                'manager_tactical_philosophy': manager_profile.get('tactical_philosophy', 'balanced'),
-                'manager_preferred_system': manager_profile.get('preferred_system', '4-4-2'),
-                'manager_formation_preferences': manager_profile.get('formation_preferences', {}),
+                'manager_tactical_philosophy': 'balanced',  # Default for now
+                'manager_preferred_system': manager_profile.get('preferred_formations', {}).get('most_used', '4-4-2'),
+                'manager_formation_preferences': manager_profile.get('preferred_formations', {}),
                 'manager_tactical_flexibility': manager_profile.get('tactical_flexibility', Decimal('0.5')),
-                'manager_tactical_rigidity': manager_profile.get('tactical_rigidity', Decimal('0.5')),
-                'manager_big_game_approach': manager_profile.get('big_game_approach', 'standard'),
+                'manager_tactical_rigidity': Decimal('0.5'),  # Calculated separately
+                'manager_big_game_approach': 'standard',  # Default for now
                 'manager_profile_available': True
             }
         else:
             # Default/unavailable manager data
+            print(f"⚠️  Using default manager data for team {team_id}")
             manager_data = {
                 'manager_name': 'Unknown',
                 'manager_experience': 0,

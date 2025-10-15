@@ -46,6 +46,12 @@ class DatabaseClient:
     @staticmethod
     def get_league_params(league_id):
         return get_league_params_from_db(league_id)
+    
+    @staticmethod
+    def get_team_matches(team_id, league_id, season, limit=100):
+        """Get team matches using the real implementation."""
+        from .database_client import get_team_matches
+        return get_team_matches(team_id, league_id, season, limit)
 
 logger = logging.getLogger(__name__)
 

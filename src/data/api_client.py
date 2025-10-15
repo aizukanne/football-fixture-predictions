@@ -24,14 +24,16 @@ rapidapi_key = os.getenv('RAPIDAPI_KEY')
 
 def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RETRIES):
     """
-    Base method for making API requests with retry logic for 429 errors.
-    
+    Base method for making API requests with robust retry logic for 429 and other errors.
+
+    Implements exponential backoff with jitter for 429 (rate limit) errors.
+
     Args:
         url: API endpoint URL
         params: Query parameters
         headers: Request headers
         max_retries: Maximum retry attempts
-        
+
     Returns:
         JSON response data or None if failed
     """
@@ -40,11 +42,14 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
             "X-RapidAPI-Key": rapidapi_key,
             "X-RapidAPI-Host": API_FOOTBALL_HOST
         }
-    
+
     retries = 0
+    base_wait = MIN_WAIT_TIME
+
     while retries < max_retries:
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+
             if response.status_code == 200:
                 try:
                     data = response.json()
@@ -56,20 +61,60 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
                     print(f"Error parsing API response: {e}")
                     print(f"Response content: {response.text[:200]}...")
                     return {"response": {}}
+
             elif response.status_code == 429:
-                wait_time = random.randint(MIN_WAIT_TIME, MAX_WAIT_TIME)
-                print(f"Received 429. Waiting {wait_time} seconds before retrying...")
-                time.sleep(wait_time)
+                # Rate limit hit - use exponential backoff with jitter
                 retries += 1
+
+                # Check if we have Retry-After header
+                retry_after = response.headers.get('Retry-After')
+                if retry_after:
+                    try:
+                        wait_time = int(retry_after)
+                        print(f"Received 429 with Retry-After: {wait_time}s")
+                    except ValueError:
+                        wait_time = base_wait * (2 ** (retries - 1))
+                else:
+                    # Exponential backoff: MIN_WAIT_TIME * 2^retry
+                    wait_time = min(base_wait * (2 ** (retries - 1)), MAX_WAIT_TIME)
+
+                # Add jitter (randomness) to prevent thundering herd
+                jitter = random.uniform(0, wait_time * 0.3)
+                final_wait = wait_time + jitter
+
+                print(f"Rate limit (429) hit. Retry {retries}/{max_retries}. Waiting {final_wait:.1f}s...")
+                time.sleep(final_wait)
+
+            elif response.status_code in [500, 502, 503, 504]:
+                # Server errors - retry with backoff
+                retries += 1
+                wait_time = min(base_wait * (2 ** (retries - 1)), MAX_WAIT_TIME)
+                print(f"Server error {response.status_code}. Retry {retries}/{max_retries}. Waiting {wait_time}s...")
+                time.sleep(wait_time)
+
+            elif response.status_code == 401:
+                # Authentication error - don't retry
+                print(f"Authentication error (401): Invalid API key")
+                print(f"Response: {response.text}")
+                return {"response": {}}
+
             else:
+                # Other errors - don't retry
                 print(f"Error in API call: Status code {response.status_code}")
                 print(f"Response content: {response.text}")
                 return {"response": {}}
+
+        except requests.exceptions.Timeout:
+            retries += 1
+            wait_time = min(base_wait * (2 ** (retries - 1)), MAX_WAIT_TIME)
+            print(f"Request timeout. Retry {retries}/{max_retries}. Waiting {wait_time}s...")
+            time.sleep(wait_time)
+
         except requests.exceptions.RequestException as e:
             print(f"Request exception: {e}")
             return {"response": {}}
-    
-    print("Max retries reached. Request failed.")
+
+    print(f"Max retries ({max_retries}) reached. Request failed.")
     return {"response": {}}
 
 
@@ -725,6 +770,9 @@ def get_coach_by_team(team_id, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get current coach/manager information for a team.
 
+    Uses recent fixture lineups to get the ACTUAL current manager, as the /coachs
+    endpoint is often outdated. Falls back to /coachs endpoint if lineups unavailable.
+
     Args:
         team_id: Team identifier
         max_retries: Maximum retry attempts
@@ -734,18 +782,60 @@ def get_coach_by_team(team_id, max_retries=DEFAULT_MAX_RETRIES):
 
     Example response:
         {
-            'id': 1993,
-            'name': 'E. ten Hag',
-            'firstname': 'Erik',
-            'lastname': 'ten Hag',
-            'age': 55,
-            'birth': {'date': '1970-02-02', 'place': 'Haaksbergen', 'country': 'Netherlands'},
-            'nationality': 'Netherlands',
+            'id': 4720,
+            'name': 'Ruben Amorim',
+            'firstname': 'Ruben',
+            'lastname': 'Amorim',
+            'age': 40,
+            'birth': {...},
+            'nationality': 'Portugal',
             'photo': 'https://...',
-            'team': {'id': 33, 'name': 'Manchester United', 'logo': '...'},
-            'career': [...]  # Career history with teams
+            'team': {'id': 33, 'name': 'Manchester United', ...},
+            'career': [...]
         }
     """
+    # STRATEGY 1: Get manager from recent fixture lineup (most accurate)
+    try:
+        # Get the most recent fixture for this team
+        fixtures_url = f"{API_FOOTBALL_BASE_URL}/fixtures"
+        fixtures_params = {"team": str(team_id), "last": "1"}
+
+        fixtures_data = _make_api_request(fixtures_url, fixtures_params, max_retries=max_retries)
+
+        if fixtures_data and "response" in fixtures_data and fixtures_data["response"]:
+            recent_fixture = fixtures_data["response"][0]
+            fixture_id = recent_fixture.get('fixture', {}).get('id')
+
+            if fixture_id:
+                # Get lineup for this fixture
+                lineup_url = f"{API_FOOTBALL_BASE_URL}/fixtures/lineups"
+                lineup_params = {"fixture": str(fixture_id)}
+
+                lineup_data = _make_api_request(lineup_url, lineup_params, max_retries=max_retries)
+
+                if lineup_data and "response" in lineup_data:
+                    lineups = lineup_data["response"]
+
+                    # Find the team's lineup
+                    for lineup in lineups:
+                        if lineup.get('team', {}).get('id') == team_id:
+                            coach_info = lineup.get('coach', {})
+
+                            if coach_info and coach_info.get('id'):
+                                print(f"Found current manager from fixture lineup: {coach_info.get('name')}")
+
+                                # Get full coach details by ID
+                                full_coach_data = get_coach_by_id(coach_info.get('id'), max_retries=max_retries)
+                                if full_coach_data:
+                                    return full_coach_data
+
+                                # If can't get full details, return what we have
+                                return coach_info
+    except Exception as e:
+        print(f"Could not get manager from fixture lineup: {e}")
+
+    # STRATEGY 2: Fallback to /coachs endpoint (may be outdated)
+    print(f"Falling back to /coachs endpoint for team {team_id}")
     url = f"{API_FOOTBALL_BASE_URL}/coachs"
     params = {"team": str(team_id)}
 
@@ -757,7 +847,7 @@ def get_coach_by_team(team_id, max_retries=DEFAULT_MAX_RETRIES):
     # Return current coach (should be first in response)
     coaches = data["response"]
     if coaches:
-        return coaches[0]  # Most recent/current coach
+        return coaches[0]
 
     return None
 
