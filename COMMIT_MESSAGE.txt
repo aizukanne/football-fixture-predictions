@@ -1,0 +1,33 @@
+fix(cors): resolve 500 errors on OPTIONS requests for /predictions and /analysis endpoints
+
+Problem:
+- /predictions endpoint returned 500 on OPTIONS (preflight) requests
+- Blocked browser CORS access while mobile apps worked fine
+- /analysis endpoint had overly permissive CORS headers
+
+Root Cause:
+- /predictions OPTIONS method missing integrationResponses configuration
+- API Gateway MOCK integration had no response mapping for status 200
+- Without integration response, API Gateway returned 500 instead of 200
+
+Solution:
+- Added integrationResponses to /predictions OPTIONS method
+- Updated /analysis CORS headers to match security requirements
+- Configured exact headers as specified:
+  * Access-Control-Allow-Origin: *
+  * Access-Control-Allow-Methods: GET,POST,OPTIONS
+  * Access-Control-Allow-Headers: Content-Type,X-Api-Key
+
+Changes:
+- Added scripts/fix_cors_configuration.sh - automated fix script
+- Added docs/reports/CORS_ISSUE_DIAGNOSIS_AND_FIX.md - complete analysis
+
+Verification:
+- Both endpoints now return 200 OK on OPTIONS requests
+- All CORS headers properly configured
+- Browser access enabled for both endpoints
+
+Deployed: API Gateway deployment 95tqd1
+Resources: xooseg (/predictions), lhmoik (/analysis)
+API ID: esqyjhhc4e
+Region: eu-west-2
