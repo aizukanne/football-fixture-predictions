@@ -1573,18 +1573,25 @@ def calculate_classification_parameters(team_id: int, league_id: int, season: in
     """
     try:
         print(f"Calculating classification parameters for team {team_id}")
-        
+
+        # Phase 5: Fetch team matches once for all Phase 5 analytics (optimization)
+        # This prevents duplicate API calls in get_team_performance_profile() and analyze_performance_consistency()
+        from ..data.database_client import DatabaseClient
+        db = DatabaseClient()
+        team_matches = db.get_team_matches(team_id, league_id, season)
+        print(f"Fetched {len(team_matches) if team_matches else 0} matches for team {team_id} Phase 5 analytics")
+
         # Phase 5: Team archetype classification
         team_classification = classify_team_archetype(team_id, league_id, season)
-        
-        # Get comprehensive performance profile
-        performance_profile = get_team_performance_profile(team_id, league_id, season)
-        
+
+        # Get comprehensive performance profile (pass matches to avoid refetch)
+        performance_profile = get_team_performance_profile(team_id, league_id, season, matches=team_matches)
+
         # Get archetype-specific prediction weights
         prediction_weights = get_archetype_prediction_weights(team_classification['primary_archetype'])
-        
-        # Analyze performance consistency
-        consistency_metrics = analyze_performance_consistency(team_id, league_id, season)
+
+        # Analyze performance consistency (pass matches to avoid refetch)
+        consistency_metrics = analyze_performance_consistency(team_id, league_id, season, matches=team_matches)
         
         # Calculate archetype-specific adjustments
         archetype_adjustments = calculate_archetype_adjustments(

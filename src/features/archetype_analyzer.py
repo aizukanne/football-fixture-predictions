@@ -20,7 +20,7 @@ from .team_classifier import classify_team_archetype, get_team_performance_profi
 logger = logging.getLogger(__name__)
 
 
-def analyze_performance_consistency(team_id: int, league_id: int, season: int) -> Dict:
+def analyze_performance_consistency(team_id: int, league_id: int, season: int, matches: Optional[List[Dict]] = None) -> Dict:
     """
     Analyze team's performance consistency across different contexts.
     
@@ -49,9 +49,11 @@ def analyze_performance_consistency(team_id: int, league_id: int, season: int) -
     """
     try:
         logger.info(f"Analyzing performance consistency for team {team_id}")
-        
-        db = DatabaseClient()
-        matches = db.get_team_matches(team_id, league_id, season)
+
+        # Use provided matches or fetch if not provided (optimization)
+        if matches is None:
+            db = DatabaseClient()
+            matches = db.get_team_matches(team_id, league_id, season)
         
         if not matches:
             return _get_default_consistency_analysis()

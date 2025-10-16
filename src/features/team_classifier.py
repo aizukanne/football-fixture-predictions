@@ -765,7 +765,7 @@ def classify_team_archetype(team_id: int, league_id: int, season: int) -> Dict:
         }
 
 
-def get_team_performance_profile(team_id: int, league_id: int, season: int) -> Dict:
+def get_team_performance_profile(team_id: int, league_id: int, season: int, matches: Optional[List[Dict]] = None) -> Dict:
     """
     Create comprehensive performance profile for team classification.
     
@@ -800,15 +800,19 @@ def get_team_performance_profile(team_id: int, league_id: int, season: int) -> D
     try:
         print(f"🔍 DEBUG: get_team_performance_profile ENTRY - team_id={team_id}")
         logger.info(f"Creating performance profile for team {team_id}")
-        
-        print(f"🔍 DEBUG: About to create DatabaseClient()")
-        db = DatabaseClient()
-        print(f"🔍 DEBUG: DatabaseClient created successfully")
-        
-        print(f"🔍 DEBUG: About to call db.get_team_matches()")
-        # Get team's match data for the season
-        matches = db.get_team_matches(team_id, league_id, season)
-        print(f"🔍 DEBUG: db.get_team_matches() completed, matches={len(matches) if matches else 0}")
+
+        # Use provided matches or fetch if not provided (optimization)
+        if matches is None:
+            print(f"🔍 DEBUG: About to create DatabaseClient()")
+            db = DatabaseClient()
+            print(f"🔍 DEBUG: DatabaseClient created successfully")
+
+            print(f"🔍 DEBUG: About to call db.get_team_matches()")
+            # Get team's match data for the season
+            matches = db.get_team_matches(team_id, league_id, season)
+            print(f"🔍 DEBUG: db.get_team_matches() completed, matches={len(matches) if matches else 0}")
+        else:
+            print(f"🔍 DEBUG: Using provided matches (count={len(matches)}), skipping fetch")
         
         if not matches:
             print(f"🔍 DEBUG: No matches found, returning default profile")
@@ -816,15 +820,18 @@ def get_team_performance_profile(team_id: int, league_id: int, season: int) -> D
         
         # Calculate attacking profile
         attacking_profile = _calculate_attacking_profile(matches, team_id)
-        
+
         # Calculate defensive profile
         defensive_profile = _calculate_defensive_profile(matches, team_id)
-        
+
         # Calculate mentality profile
         mentality_profile = _calculate_mentality_profile(matches, team_id)
-        
+
         # Calculate tactical profile
-        tactical_profile = _calculate_tactical_profile(matches, team_id, db)
+        # Note: _calculate_tactical_profile needs a db reference but doesn't actually use it
+        # Create db instance only if we didn't fetch matches ourselves
+        db_for_tactical = db if 'db' in locals() else DatabaseClient()
+        tactical_profile = _calculate_tactical_profile(matches, team_id, db_for_tactical)
         
         profile = {
             'attacking_profile': attacking_profile,
