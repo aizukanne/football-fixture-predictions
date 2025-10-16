@@ -573,8 +573,16 @@ def _query_completed_matches_from_db(team_id, league_id, season):
             print(f"League {league_id} not found in configuration")
             return []
         
-        country = league_config.get('country', '')
-        league_name = league_config.get('league', '')
+        # Extract league metadata from config
+        # Note: league config uses 'name' key (e.g., {'name': 'Premier League'})
+        # while DynamoDB uses 'league' column for GSI queries
+        country = league_config.get('country')
+        league_name = league_config.get('name')
+
+        # Validate league info - cannot query with None or empty strings
+        if not country or not league_name:
+            print(f"Invalid league config for league {league_id}: country={repr(country)}, name={repr(league_name)}")
+            return []
         
         # Query using country-league-index GSI
         matches = []
@@ -644,7 +652,14 @@ def _fetch_league_matches_cached(league_id, season):
         List of all league matches (cached for 1 hour)
     """
     try:
-        cache_key = f"league_{league_id}_season_{season}"
+        # Ensure season is an integer
+        try:
+            season_int = int(season)
+        except (ValueError, TypeError) as e:
+            print(f"Error: Invalid season value '{season}': {e}")
+            return []
+        
+        cache_key = f"league_{league_id}_season_{season_int}"
         current_time = datetime.now().timestamp()
         
         # Check if cache exists and is fresh
@@ -654,54 +669,39 @@ def _fetch_league_matches_cached(league_id, season):
                 print(f"Cache hit for {cache_key}")
                 return _league_matches_cache[cache_key]
         
-        # Fetch from API
-        print(f"Fetching league matches from API for league {league_id}, season {season}")
-        from .api_client import get_fixtures_goals
+        # Fetch from API using season parameter (like legacy code)
+        print(f"Fetching league matches from API for league {league_id}, season {season_int}")
+        from .api_client import get_football_match_scores
+        import pandas as pd
         
-        # Calculate season date range
-        season_start = datetime(season, 8, 1)
-        season_end = datetime.now()
+        # Get all fixtures for the league using season parameter
+        df_matches = get_football_match_scores(league_id, str(season_int))
         
-        start_ts = int(season_start.timestamp())
-        end_ts = int(season_end.timestamp())
-        
-        # Get all fixtures for the league
-        api_fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
-        
-        if not api_fixtures:
+        if df_matches.empty:
             print(f"No fixtures returned from API for league {league_id}")
             return []
         
-        # Convert API format to standardized format
+        # Convert DataFrame to list of match dictionaries
+        # DataFrame already has correct field names from get_football_match_scores
         matches = []
-        for fixture in api_fixtures:
-            if not isinstance(fixture, dict):
+        for _, row in df_matches.iterrows():
+            try:
+                # Use safe .get() access with proper type conversion and null checks
+                match = {
+                    'fixture_id': int(row.get('fixture_id', 0)) if pd.notna(row.get('fixture_id')) else 0,
+                    'home_team_id': int(row.get('home_team_id', 0)) if pd.notna(row.get('home_team_id')) else 0,
+                    'away_team_id': int(row.get('away_team_id', 0)) if pd.notna(row.get('away_team_id')) else 0,
+                    'home_goals': int(row.get('home_goals', 0)) if pd.notna(row.get('home_goals')) else 0,
+                    'away_goals': int(row.get('away_goals', 0)) if pd.notna(row.get('away_goals')) else 0,
+                    'timestamp': 0,  # Not provided by get_football_match_scores, but not critical
+                    'date': row.get('date', '') if pd.notna(row.get('date')) else '',
+                    'league_id': int(row.get('league_id', league_id)) if pd.notna(row.get('league_id')) else league_id,
+                    'season': int(row.get('season', season_int)) if pd.notna(row.get('season')) else season_int
+                }
+                matches.append(match)
+            except (ValueError, TypeError, AttributeError) as e:
+                print(f"Warning: Skipping malformed match row due to conversion error: {e}")
                 continue
-            
-            fixture_data = fixture.get('fixture', {})
-            teams = fixture.get('teams', {})
-            goals = fixture.get('goals', {})
-            league_data = fixture.get('league', {})
-            
-            home_team = teams.get('home', {})
-            away_team = teams.get('away', {})
-            
-            # Only include completed matches with goals
-            if goals.get('home') is None or goals.get('away') is None:
-                continue
-            
-            match = {
-                'fixture_id': int(fixture_data.get('id', 0)),
-                'home_team_id': int(home_team.get('id', 0)),
-                'away_team_id': int(away_team.get('id', 0)),
-                'home_goals': int(goals.get('home', 0)),
-                'away_goals': int(goals.get('away', 0)),
-                'timestamp': int(fixture_data.get('timestamp', 0)),
-                'date': fixture_data.get('date', ''),
-                'league_id': int(league_data.get('id', league_id)),
-                'season': int(league_data.get('season', season))
-            }
-            matches.append(match)
         
         # Store in cache
         _league_matches_cache[cache_key] = matches
@@ -827,10 +827,24 @@ def get_team_matches(team_id, league_id, season=None, limit=100, min_required=5)
             # Determine result
             if match['goals_scored'] > match['goals_conceded']:
                 match['result'] = 'W'
+                match['result_points'] = 3
             elif match['goals_scored'] < match['goals_conceded']:
                 match['result'] = 'L'
+                match['result_points'] = 0
             else:
                 match['result'] = 'D'
+                match['result_points'] = 1
+            
+            # Convert date string to datetime object for analysis
+            if 'date' in match and match['date']:
+                try:
+                    from dateutil import parser
+                    match['match_date'] = parser.parse(match['date'])
+                except Exception as e:
+                    print(f"Warning: Failed to parse date '{match['date']}' for fixture {match.get('fixture_id', 'unknown')}: {e}")
+                    match['match_date'] = datetime.now()
+            else:
+                match['match_date'] = datetime.now()
         
         # Step 6: Apply limit if specified
         if limit and len(matches) > limit:

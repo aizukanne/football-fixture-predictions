@@ -57,31 +57,35 @@ def analyze_performance_consistency(team_id: int, league_id: int, season: int) -
             return _get_default_consistency_analysis()
         
         # Prepare match data with results and contexts
+        # Note: get_team_matches() already enriches matches with computed fields
         match_results = []
         for match in matches:
-            is_home = match['home_team_id'] == team_id
-            goals_for = match['home_goals'] if is_home else match['away_goals']
-            goals_against = match['away_goals'] if is_home else match['home_goals']
-            
+            # Use pre-computed fields from get_team_matches() to avoid redundant calculations
+            # and potential KeyErrors from missing fields
+            is_home = match.get('is_home', match.get('home_team_id') == team_id)
+            goals_scored = match.get('goals_scored', 0)
+            goals_conceded = match.get('goals_conceded', 0)
+
             # Result value: 3 = win, 1 = draw, 0 = loss
-            if goals_for > goals_against:
-                result_points = 3
-            elif goals_for == goals_against:
-                result_points = 1
+            if 'result_points' in match:
+                result_points = match['result_points']
             else:
-                result_points = 0
-            
-            opponent_id = match['away_team_id'] if is_home else match['home_team_id']
-            
+                if goals_scored > goals_conceded:
+                    result_points = 3
+                elif goals_scored == goals_conceded:
+                    result_points = 1
+                else:
+                    result_points = 0
+
             match_data = {
                 'result_points': result_points,
-                'goals_for': goals_for,
-                'goals_against': goals_against,
-                'goal_difference': goals_for - goals_against,
+                'goals_for': goals_scored,
+                'goals_against': goals_conceded,
+                'goal_difference': goals_scored - goals_conceded,
                 'is_home': is_home,
-                'opponent_id': opponent_id,
+                'opponent_id': match.get('opponent_id', 0),
                 'match_date': match.get('match_date', datetime.now()),
-                'match_id': match.get('match_id')
+                'match_id': match.get('fixture_id', match.get('match_id', 0))
             }
             match_results.append(match_data)
         
@@ -325,8 +329,8 @@ def detect_archetype_outliers(team_id: int, archetype: str, league_id: int, seas
             
             if match_analysis['is_outlier']:
                 outlier_matches.append({
-                    'match_id': match.get('match_id'),
-                    'opponent_id': match['away_team_id'] if match['home_team_id'] == team_id else match['home_team_id'],
+                    'match_id': match.get('fixture_id', match.get('match_id')),
+                    'opponent_id': match.get('opponent_id', 0),
                     'match_date': match.get('match_date'),
                     'deviation_type': match_analysis['deviation_type'],
                     'deviation_magnitude': match_analysis['deviation_magnitude'],
@@ -606,15 +610,15 @@ def _analyze_opponent_triggers(matches: List[Dict], team_id: int, league_id: int
     try:
         # Simplified opponent analysis
         opponent_results = defaultdict(list)
-        
+
         for match in matches:
-            is_home = match['home_team_id'] == team_id
-            goals_for = match['home_goals'] if is_home else match['away_goals']
-            goals_against = match['away_goals'] if is_home else match['home_goals']
-            
-            result_quality = goals_for - goals_against  # Goal difference as performance measure
-            opponent_id = match['away_team_id'] if is_home else match['home_team_id']
-            
+            # Use pre-computed fields from get_team_matches()
+            goals_scored = match.get('goals_scored', 0)
+            goals_conceded = match.get('goals_conceded', 0)
+            opponent_id = match.get('opponent_id', 0)
+
+            result_quality = goals_scored - goals_conceded  # Goal difference as performance measure
+
             opponent_results[opponent_id].append(result_quality)
         
         # Classify opponents based on performance against them
@@ -644,14 +648,15 @@ def _analyze_venue_triggers(matches: List[Dict], team_id: int) -> Dict:
     try:
         home_results = []
         away_results = []
-        
+
         for match in matches:
-            is_home = match['home_team_id'] == team_id
-            goals_for = match['home_goals'] if is_home else match['away_goals']
-            goals_against = match['away_goals'] if is_home else match['home_goals']
-            
-            result_quality = goals_for - goals_against
-            
+            # Use pre-computed fields from get_team_matches()
+            is_home = match.get('is_home', False)
+            goals_scored = match.get('goals_scored', 0)
+            goals_conceded = match.get('goals_conceded', 0)
+
+            result_quality = goals_scored - goals_conceded
+
             if is_home:
                 home_results.append(result_quality)
             else:
@@ -711,12 +716,12 @@ def _analyze_temporal_triggers(matches: List[Dict], team_id: int) -> Dict:
             match_date = match.get('match_date')
             if isinstance(match_date, datetime):
                 month = match_date.month
-                
-                is_home = match['home_team_id'] == team_id
-                goals_for = match['home_goals'] if is_home else match['away_goals']
-                goals_against = match['away_goals'] if is_home else match['home_goals']
-                
-                result_quality = goals_for - goals_against
+
+                # Use pre-computed fields from get_team_matches()
+                goals_scored = match.get('goals_scored', 0)
+                goals_conceded = match.get('goals_conceded', 0)
+
+                result_quality = goals_scored - goals_conceded
                 monthly_performance[month].append(result_quality)
         
         # Find best and worst performing months
@@ -982,13 +987,19 @@ def _get_simplified_opponent_strengths(matches: List[Dict], league_id: int, seas
     # Simplified implementation - would use actual league standings/ratings
     opponent_strengths = {}
     for match in matches:
-        home_id = match['home_team_id']
-        away_id = match['away_team_id']
-        
+        # Use safe access with .get() to avoid KeyErrors
+        home_id = match.get('home_team_id', 0)
+        away_id = match.get('away_team_id', 0)
+        opponent_id = match.get('opponent_id', 0)
+
         # Default to middle strength
-        opponent_strengths[home_id] = 0.5
-        opponent_strengths[away_id] = 0.5
-    
+        if home_id:
+            opponent_strengths[home_id] = 0.5
+        if away_id:
+            opponent_strengths[away_id] = 0.5
+        if opponent_id:
+            opponent_strengths[opponent_id] = 0.5
+
     return opponent_strengths
 
 
