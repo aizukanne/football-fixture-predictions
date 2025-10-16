@@ -6,10 +6,11 @@ Coordinates prediction workflow using modular components.
 import json
 import boto3
 from decimal import Decimal
+from datetime import datetime
 
 from ..prediction.prediction_engine import (
-    calculate_coordinated_predictions, 
-    calculate_to_score, 
+    calculate_coordinated_predictions,
+    calculate_to_score,
     calculate_base_lambda,
     create_prediction_summary_dict
 )
@@ -33,6 +34,7 @@ from ..parameters.team_calculator import calculate_team_points
 from ..utils.converters import convert_floats_to_decimal, decimal_default, decimal_to_float
 from ..utils.constants import BEST_BETS_QUEUE_URL
 from ..utils.manager_multipliers import apply_manager_adjustments, get_opponent_tier_from_standings
+from ..infrastructure.version_manager import VersionManager
 
 
 def lambda_handler(event, context):
@@ -59,6 +61,11 @@ def process_fixtures(fixtures):
     Process fixtures with coordinated lambda correction to preserve outcome relationships.
     Drop-in replacement for the original process_fixtures function.
     """
+    # Initialize version manager
+    version_manager = VersionManager()
+    current_version = version_manager.get_current_version()
+    print(f"Processing fixtures with architecture version: {current_version}")
+    
     for fixture in fixtures:
         try:
             fixture_id = fixture['fixture_id']
@@ -78,8 +85,15 @@ def process_fixtures(fixtures):
             print(f'League Params: {json.dumps(league_params, default=decimal_default)}')
 
             # Get team parameters using composite key (fallback to league if not available)
-            home_params = get_team_params_from_db(home_team_id, league_id) or league_params
-            away_params = get_team_params_from_db(away_team_id, league_id) or league_params
+            home_params_from_db = get_team_params_from_db(home_team_id, league_id)
+            away_params_from_db = get_team_params_from_db(away_team_id, league_id)
+            
+            # Track parameter sources for metadata
+            used_team_params_home = home_params_from_db is not None
+            used_team_params_away = away_params_from_db is not None
+            
+            home_params = home_params_from_db or league_params
+            away_params = away_params_from_db or league_params
             
             print(f'Home Before: {json.dumps(home_params, default=decimal_default)}')
             print(f'Away Before: {json.dumps(away_params, default=decimal_default)}')
@@ -315,6 +329,14 @@ def process_fixtures(fixtures):
                 "coordination_info": {
                     "league_coordination": convert_floats_to_decimal(league_coordination_info),
                     "team_coordination": convert_floats_to_decimal(team_coordination_info)
+                },
+                "prediction_metadata": {
+                    "architecture_version": current_version,
+                    "prediction_date": int(datetime.now().timestamp()),
+                    "parameters_used": {
+                        "home_source": "team" if used_team_params_home else "league",
+                        "away_source": "team" if used_team_params_away else "league"
+                    }
                 },
                 "timestamp": fixture['timestamp']
             }

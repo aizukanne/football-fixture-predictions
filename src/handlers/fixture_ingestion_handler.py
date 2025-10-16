@@ -20,6 +20,7 @@ from ..utils.fixture_formatter import FixtureFormatter
 from ..config.leagues_config import get_all_leagues
 from ..utils.constants import FIXTURES_QUEUE_URL
 from ..utils.converters import convert_for_json
+from ..infrastructure.version_manager import VersionManager
 
 
 def lambda_handler(event, context) -> Dict:
@@ -44,6 +45,11 @@ def lambda_handler(event, context) -> Dict:
     retriever = FixtureRetriever()
     formatter = FixtureFormatter()
     sqs = boto3.client('sqs')
+    version_manager = VersionManager()
+    
+    # Get current architecture version
+    current_version = version_manager.get_current_version()
+    print(f"Using architecture version: {current_version}")
 
     # Processing summary
     summary = {
@@ -118,6 +124,14 @@ def lambda_handler(event, context) -> Dict:
             if not formatted_fixtures:
                 print(f"No valid fixtures after formatting for {league_name}")
                 continue
+            
+            # Add version metadata to each fixture
+            current_timestamp = int(datetime.now().timestamp())
+            for fixture in formatted_fixtures:
+                fixture['prediction_metadata'] = {
+                    'architecture_version': current_version,
+                    'ingestion_date': current_timestamp
+                }
 
             # Send to SQS queue
             queue_response = send_fixtures_to_queue(
