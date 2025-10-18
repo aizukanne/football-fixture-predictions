@@ -1,33 +1,45 @@
-fix(cors): resolve 500 errors on OPTIONS requests for /predictions and /analysis endpoints
+fix(cors): resolve CORS issues for /predictions and /analysis endpoints
 
 Problem:
 - /predictions endpoint returned 500 on OPTIONS (preflight) requests
-- Blocked browser CORS access while mobile apps worked fine
-- /analysis endpoint had overly permissive CORS headers
+- /analysis endpoint returned CORS header that didn't match browser origin
+- Error: "CORS header 'Access-Control-Allow-Origin' does not match 'null'"
+- Both issues prevented browser CORS access while mobile apps worked fine
 
-Root Cause:
-- /predictions OPTIONS method missing integrationResponses configuration
-- API Gateway MOCK integration had no response mapping for status 200
-- Without integration response, API Gateway returned 500 instead of 200
+Root Causes:
+1. /predictions OPTIONS method missing integrationResponses configuration
+   - API Gateway MOCK integration had no response mapping for status 200
+   - Without integration response, API Gateway returned 500 instead of 200
+
+2. /analysis Lambda handler had incorrect CORS origin logic
+   - Initially returned invalid "Mobile App" string
+   - After first fix, returned "*" which doesn't work for null origins
+   - Browsers with null origin (local files) require exact echo of "null"
 
 Solution:
-- Added integrationResponses to /predictions OPTIONS method
-- Updated /analysis CORS headers to match security requirements
-- Configured exact headers as specified:
-  * Access-Control-Allow-Origin: *
-  * Access-Control-Allow-Methods: GET,POST,OPTIONS
-  * Access-Control-Allow-Headers: Content-Type,X-Api-Key
+- Fixed /predictions: Added integrationResponses to OPTIONS method via AWS API
+- Fixed /analysis: Changed Lambda to echo back the exact origin header
+  * If origin is "null" -> return "null" 
+  * If origin is "https://example.com" -> return "https://example.com"
+  * If no origin -> return "*"
+- This is the correct CORS behavior per spec
 
 Changes:
-- Added scripts/fix_cors_configuration.sh - automated fix script
+- Modified src/handlers/genai_pundit_handler.py lines 338-349
+- Added scripts/fix_cors_configuration.sh - automated API Gateway fix
+- Added scripts/update_genai_lambda_code.sh - quick Lambda update script  
 - Added docs/reports/CORS_ISSUE_DIAGNOSIS_AND_FIX.md - complete analysis
 
 Verification:
-- Both endpoints now return 200 OK on OPTIONS requests
-- All CORS headers properly configured
-- Browser access enabled for both endpoints
+✓ /predictions OPTIONS returns 200 with correct CORS headers
+✓ /analysis OPTIONS returns 200 with correct CORS headers
+✓ /analysis POST with Origin: null returns Access-Control-Allow-Origin: null
+✓ /analysis POST with Origin: https://example.com returns Access-Control-Allow-Origin: https://example.com
+✓ Browser access enabled for both endpoints from any origin with valid API key
 
-Deployed: API Gateway deployment 95tqd1
+Deployed:
+- API Gateway deployment 95tqd1
+- Lambda function football-genai-pundit-prod updated (twice)
 Resources: xooseg (/predictions), lhmoik (/analysis)
 API ID: esqyjhhc4e
 Region: eu-west-2

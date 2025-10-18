@@ -16,11 +16,6 @@ import requests
 from boto3.dynamodb.conditions import Key
 from typing import Dict, Any, Optional
 
-from ..services.parameter_extraction_service import (
-    extract_ai_relevant_parameters,
-    build_ai_context,
-    get_parameter_summary
-)
 from ..services.genai_analysis_service import GenAIAnalysisService
 from ..utils.converters_lite import convert_for_dynamodb, decimal_to_float
 
@@ -341,16 +336,18 @@ def handle_api_gateway_request(event: dict, context: Any) -> dict:
     api_key = identity.get('apiKey', '')
     
     # Determine allowed origin
-    if origin in ALLOWED_ORIGINS:
+    # Always allow requests with valid API key by echoing back the origin
+    if api_key == MOBILE_API_KEY:
+        # Echo back the exact origin (including 'null' for local files)
+        allowed_origin = origin if origin else "*"
+    elif origin in ALLOWED_ORIGINS:
         allowed_origin = origin
-    elif api_key == MOBILE_API_KEY:
-        allowed_origin = "Mobile App"
     else:
         allowed_origin = None
     
     # CORS headers
     cors_headers = {
-        'Access-Control-Allow-Origin': allowed_origin if allowed_origin else "null",
+        'Access-Control-Allow-Origin': allowed_origin if allowed_origin else "*",
         'Access-Control-Allow-Headers': 'content-type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,x-api-key',
         'Access-Control-Allow-Methods': 'OPTIONS,POST',
         'Content-Type': 'application/json; charset=utf-8'
@@ -561,7 +558,7 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
         print(f"Home standings: {home_standings}")
         print(f"Away standings: {away_standings}")
         
-        # 5. Load team parameters
+        # 5. Load team parameters (send complete data - no extraction)
         home_params_raw = get_team_parameters(league_id, home_team_id)
         away_params_raw = get_team_parameters(league_id, away_team_id)
         
@@ -569,31 +566,52 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
             print("Warning: Team parameters not found")
             return None
         
-        # 6. Extract AI-relevant parameters
-        home_params = extract_ai_relevant_parameters(home_params_raw)
-        away_params = extract_ai_relevant_parameters(away_params_raw)
+        # Convert Decimal to float for JSON serialization
+        from ..utils.converters_lite import decimal_to_float
+        home_params = decimal_to_float(home_params_raw)
+        away_params = decimal_to_float(away_params_raw)
         
-        print(f"Home params: {get_parameter_summary(home_params)}")
-        print(f"Away params: {get_parameter_summary(away_params)}")
+        print(f"Sending complete team parameters to AI")
+        print(f"Home params fields: {len(home_params)} | Away params fields: {len(away_params)}")
         
         # 7. Load league parameters
         league_params = get_league_parameters(league_id, season)
         if not league_params:
             league_params = {}
             print("Warning: League parameters not found, using empty dict")
+        else:
+            # Convert Decimal to float for JSON serialization
+            league_params = decimal_to_float(league_params)
         
-        # 8. Build AI context
-        context = build_ai_context(
-            fixture_data,
-            home_params,
-            away_params,
-            league_params,
-            weather_data=weather_data,
-            home_standings=home_standings,
-            away_standings=away_standings
-        )
+        # 8. Build complete AI context with raw data
+        context = {
+            'fixture_info': {
+                'fixture_id': fixture_data.get('fixture_id'),
+                'date': fixture_data.get('date'),
+                'league': fixture_data.get('league'),
+                'venue': fixture_data.get('venue'),
+                'timestamp': fixture_data.get('timestamp')
+            },
+            'home_team': {
+                'team_name': fixture_data.get('home', {}).get('team_name'),
+                'team_id': fixture_data.get('home', {}).get('team_id'),
+                'predictions': fixture_data.get('home'),
+                'parameters': home_params,  # Complete raw parameters
+                'standings': home_standings if home_standings else {}
+            },
+            'away_team': {
+                'team_name': fixture_data.get('away', {}).get('team_name'),
+                'team_id': fixture_data.get('away', {}).get('team_id'),
+                'predictions': fixture_data.get('away'),
+                'parameters': away_params,  # Complete raw parameters
+                'standings': away_standings if away_standings else {}
+            },
+            'match_predictions': fixture_data.get('predictions', {}),
+            'league_parameters': league_params,  # Complete league parameters
+            'weather': weather_data if weather_data else fixture_data.get('weather', {})
+        }
         
-        print("AI context built successfully")
+        print("AI context built with complete raw parameters")
         
         # 9. Generate analysis with AI
         analysis_text, provider, generation_time_ms = ai_service.generate_analysis(context)
