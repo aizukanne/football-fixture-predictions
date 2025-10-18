@@ -477,7 +477,8 @@ def update_fixture_best_bet(fixture_id, best_bet_data):
             print(f"No item found with fixture_id: {fixture_id}")
             return False
 
-        timestamp = response['Items'][0]['timestamp']
+        # DynamoDB returns Decimal objects - convert to int for key matching
+        timestamp = int(response['Items'][0]['timestamp'])
 
         # Update the item with best_bet attribute
         update_response = webFE_table.update_item(

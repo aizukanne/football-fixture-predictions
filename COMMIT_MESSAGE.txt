@@ -1,23 +1,30 @@
-feat(api): include actual match scores in league search results
+feat(api): include actual scores in league search; fix best_bet update error
 
-Added the 'goals' field to the /predictions endpoint response when querying
-by country and league. Previously, actual scores were only included when
-querying by fixture_id.
+1. Added actual match scores to league search results
+   - Modified src/services/data_formatter.py to include 'goals' field
+   - Previously only available in single fixture queries
+   - Enables comparison of predictions vs actual outcomes in bulk queries
+
+2. Fixed DynamoDB ValidationException in best_bet updates
+   - Modified src/data/database_client.py update_fixture_best_bet()
+   - Root cause: timestamp retrieved as Decimal but needs int for key matching
+   - Error: "The provided key element does not match the schema"
+   - Solution: Convert timestamp to int before using in update_item Key
 
 Changes:
-- Modified src/services/data_formatter.py
-- Updated _format_single_fixture() to include goals field if available
-- Actual scores now appear in league query responses for finished matches
+- src/services/data_formatter.py: Added goals field to _format_single_fixture()
+- src/data/database_client.py: Convert timestamp Decimal to int (line 481)
 
 Benefits:
-- Consumers can now see actual results alongside predictions in bulk queries
-- Enables comparison of predictions vs actual outcomes in league views
-- Maintains backward compatibility (field only present if data exists)
+- Best bets now save correctly to game_fixtures table
+- League queries show actual scores alongside predictions for finished matches
+- Maintains backward compatibility (goals field only present if data exists)
 
 Response format example:
 {
   "fixture_id": 123,
   "home": { "predicted_goals": 1.8 },
   "away": { "predicted_goals": 1.2 },
-  "goals": { "home": 2, "away": 1 }  // NEW - only if match finished
+  "goals": { "home": 2, "away": 1 },  // NEW - only if match finished
+  "best_bet": [...]                    // Now saves correctly
 }
