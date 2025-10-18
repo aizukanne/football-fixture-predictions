@@ -116,6 +116,13 @@ class DataFormatter:
                 item['prediction_confidence']
             )
 
+        # Add actual scores if available (for finished matches)
+        if 'goals' in item and item['goals']:
+            formatted_fixture['goals'] = {
+                'home': self._safe_decimal_convert(item['goals'].get('home')),
+                'away': self._safe_decimal_convert(item['goals'].get('away'))
+            }
+
         return formatted_fixture
 
     def _safe_decimal_convert(self, value: Any) -> Any:

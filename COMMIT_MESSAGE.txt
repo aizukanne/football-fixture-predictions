@@ -1,45 +1,23 @@
-fix(cors): resolve CORS issues for /predictions and /analysis endpoints
+feat(api): include actual match scores in league search results
 
-Problem:
-- /predictions endpoint returned 500 on OPTIONS (preflight) requests
-- /analysis endpoint returned CORS header that didn't match browser origin
-- Error: "CORS header 'Access-Control-Allow-Origin' does not match 'null'"
-- Both issues prevented browser CORS access while mobile apps worked fine
-
-Root Causes:
-1. /predictions OPTIONS method missing integrationResponses configuration
-   - API Gateway MOCK integration had no response mapping for status 200
-   - Without integration response, API Gateway returned 500 instead of 200
-
-2. /analysis Lambda handler had incorrect CORS origin logic
-   - Initially returned invalid "Mobile App" string
-   - After first fix, returned "*" which doesn't work for null origins
-   - Browsers with null origin (local files) require exact echo of "null"
-
-Solution:
-- Fixed /predictions: Added integrationResponses to OPTIONS method via AWS API
-- Fixed /analysis: Changed Lambda to echo back the exact origin header
-  * If origin is "null" -> return "null" 
-  * If origin is "https://example.com" -> return "https://example.com"
-  * If no origin -> return "*"
-- This is the correct CORS behavior per spec
+Added the 'goals' field to the /predictions endpoint response when querying
+by country and league. Previously, actual scores were only included when
+querying by fixture_id.
 
 Changes:
-- Modified src/handlers/genai_pundit_handler.py lines 338-349
-- Added scripts/fix_cors_configuration.sh - automated API Gateway fix
-- Added scripts/update_genai_lambda_code.sh - quick Lambda update script  
-- Added docs/reports/CORS_ISSUE_DIAGNOSIS_AND_FIX.md - complete analysis
+- Modified src/services/data_formatter.py
+- Updated _format_single_fixture() to include goals field if available
+- Actual scores now appear in league query responses for finished matches
 
-Verification:
-✓ /predictions OPTIONS returns 200 with correct CORS headers
-✓ /analysis OPTIONS returns 200 with correct CORS headers
-✓ /analysis POST with Origin: null returns Access-Control-Allow-Origin: null
-✓ /analysis POST with Origin: https://example.com returns Access-Control-Allow-Origin: https://example.com
-✓ Browser access enabled for both endpoints from any origin with valid API key
+Benefits:
+- Consumers can now see actual results alongside predictions in bulk queries
+- Enables comparison of predictions vs actual outcomes in league views
+- Maintains backward compatibility (field only present if data exists)
 
-Deployed:
-- API Gateway deployment 95tqd1
-- Lambda function football-genai-pundit-prod updated (twice)
-Resources: xooseg (/predictions), lhmoik (/analysis)
-API ID: esqyjhhc4e
-Region: eu-west-2
+Response format example:
+{
+  "fixture_id": 123,
+  "home": { "predicted_goals": 1.8 },
+  "away": { "predicted_goals": 1.2 },
+  "goals": { "home": 2, "away": 1 }  // NEW - only if match finished
+}
