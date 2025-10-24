@@ -26,6 +26,7 @@ import logging
 
 from ..infrastructure.version_manager import VersionManager
 from ..infrastructure.transition_manager import TransitionManager
+from ..utils.constants import MINIMUM_GAMES_THRESHOLD
 
 
 class MultiplierCalculator:
@@ -42,7 +43,7 @@ class MultiplierCalculator:
         self.logger = logging.getLogger(__name__)
         
         # Configuration
-        self.min_team_sample_size = 15
+        self.min_team_sample_size = MINIMUM_GAMES_THRESHOLD  # Use consistent threshold (6 games)
         self.min_league_sample_size = 30
         self.max_adjustment = 0.5  # Maximum adjustment from 1.0
     

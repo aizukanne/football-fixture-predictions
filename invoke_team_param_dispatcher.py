@@ -122,8 +122,8 @@ def main():
 
     # Determine what to run
     if args.test:
-        print("\n🧪 TEST MODE: Running for Premier League (ID: 103) only\n")
-        result = invoke_dispatcher(dry_run=args.dry_run, league_ids=[103], all_leagues=False)
+        print("\n🧪 TEST MODE: Running for Championship (ID: 40) only\n")
+        result = invoke_dispatcher(dry_run=args.dry_run, league_ids=[40], all_leagues=False)
     elif args.league_ids:
         result = invoke_dispatcher(dry_run=args.dry_run, league_ids=args.league_ids, all_leagues=False)
     elif args.all_leagues:

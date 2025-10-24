@@ -613,7 +613,7 @@ def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEF
     return team_parameters, match_details
 
 
-def get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries=DEFAULT_MAX_RETRIES):
+def get_fixtures_goals(league_id, start_timestamp, end_timestamp, season, max_retries=DEFAULT_MAX_RETRIES):
     """
     Fetch fixture goals for a specific league within a time range.
     Used by tactical_analyzer and team_classifier for analytics on historical matches.
@@ -625,6 +625,7 @@ def get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries=DE
         league_id: League identifier
         start_timestamp: Start timestamp
         end_timestamp: End timestamp
+        season: Season year (REQUIRED) - e.g. "2024" or 2024
         max_retries: Maximum retry attempts
 
     Returns:
@@ -633,6 +634,7 @@ def get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries=DE
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
     params = {
         "league": str(league_id),
+        "season": str(season),
         "from": datetime.fromtimestamp(start_timestamp).strftime('%Y-%m-%d'),
         "to": datetime.fromtimestamp(end_timestamp).strftime('%Y-%m-%d')
     }
@@ -954,8 +956,8 @@ class APIClient:
     def fetch_team_match_data(self, league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES):
         return fetch_team_match_data(league_id, season, team_id, from_date, max_retries)
     
-    def get_fixtures_goals(self, league_id, start_timestamp, end_timestamp, max_retries=DEFAULT_MAX_RETRIES):
-        return get_fixtures_goals(league_id, start_timestamp, end_timestamp, max_retries)
+    def get_fixtures_goals(self, league_id, start_timestamp, end_timestamp, season, max_retries=DEFAULT_MAX_RETRIES):
+        return get_fixtures_goals(league_id, start_timestamp, end_timestamp, season, max_retries)
 
     def get_fixtures_goals_by_ids(self, fixture_ids, max_retries=DEFAULT_MAX_RETRIES):
         return get_fixtures_goals_by_ids(fixture_ids, max_retries)

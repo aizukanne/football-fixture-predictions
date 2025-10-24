@@ -426,6 +426,67 @@ class TableDeployer:
             logger.error(f"❌ Failed to create {table_name}: {e}")
             return False
 
+    def create_fixture_events_cache_table(self) -> bool:
+        """
+        Create the fixture_events_cache table for caching fixture events data.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        table_name = _get_table_name('fixture_events_cache')
+
+        if self.dry_run:
+            logger.info(f"[DRY RUN] Would create table: {table_name}")
+            return True
+
+        try:
+            # Check if table exists
+            try:
+                self.dynamodb.Table(table_name).load()
+                logger.info(f"Table {table_name} already exists")
+                return True
+            except ClientError as e:
+                if e.response['Error']['Code'] != 'ResourceNotFoundException':
+                    raise
+
+            # Create table
+            logger.info(f"Creating table: {table_name}")
+
+            table = self.dynamodb.create_table(
+                TableName=table_name,
+                KeySchema=[
+                    {'AttributeName': 'fixture_id', 'KeyType': 'HASH'}
+                ],
+                AttributeDefinitions=[
+                    {'AttributeName': 'fixture_id', 'AttributeType': 'S'}
+                ],
+                BillingMode='PAY_PER_REQUEST',
+                Tags=[
+                    {'Key': 'Project', 'Value': 'football-fixture-predictions'},
+                    {'Key': 'Environment', 'Value': ENVIRONMENT},
+                    {'Key': 'Purpose', 'Value': 'fixture-events-cache'},
+                    {'Key': 'TTL', 'Value': '7days'}
+                ]
+            )
+
+            table.wait_until_exists()
+
+            # Enable TTL
+            self.client.update_time_to_live(
+                TableName=table_name,
+                TimeToLiveSpecification={
+                    'AttributeName': 'ttl',
+                    'Enabled': True
+                }
+            )
+
+            logger.info(f"✅ Table {table_name} created successfully with TTL enabled")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create {table_name}: {e}")
+            return False
+
     def deploy_all_tables(self) -> Dict[str, bool]:
         """
         Deploy all required DynamoDB tables.
@@ -450,7 +511,8 @@ class TableDeployer:
             ('team_parameters', self.create_team_parameters_table),
             ('venue_cache', self.create_venue_cache_table),
             ('tactical_cache', self.create_tactical_cache_table),
-            ('league_standings_cache', self.create_league_standings_cache_table)
+            ('league_standings_cache', self.create_league_standings_cache_table),
+            ('fixture_events_cache', self.create_fixture_events_cache_table)
         ]
 
         results = {}

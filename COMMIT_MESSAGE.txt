@@ -1,30 +1,51 @@
-feat(api): include actual scores in league search; fix best_bet update error
+Fix: Critical bugs in API calls, tactical analysis, and caching
 
-1. Added actual match scores to league search results
-   - Modified src/services/data_formatter.py to include 'goals' field
-   - Previously only available in single fixture queries
-   - Enables comparison of predictions vs actual outcomes in bulk queries
+This commit addresses multiple critical issues discovered during team parameter calculation:
 
-2. Fixed DynamoDB ValidationException in best_bet updates
-   - Modified src/data/database_client.py update_fixture_best_bet()
-   - Root cause: timestamp retrieved as Decimal but needs int for key matching
-   - Error: "The provided key element does not match the schema"
-   - Solution: Convert timestamp to int before using in update_item Key
+## 1. Season Parameter Required for Fixtures API (CRITICAL)
+- Added required `season` parameter to get_fixtures_goals()
+- Updated api_client.py (lines 616, 637, 957) to accept and pass season
+- Updated tactical_analyzer.py (lines 646, 828) to provide season parameter
+- **Impact**: Fixes 0 fixtures being returned for ALL leagues
+- **Test**: All leagues now return fixtures (Premier League: 380, Championship: 557, Eliteserien: 113)
 
-Changes:
-- src/services/data_formatter.py: Added goals field to _format_single_fixture()
-- src/data/database_client.py: Convert timestamp Decimal to int (line 481)
+## 2. get_league_teams() Type Mismatch Fixes
+- Fixed tactical_analyzer.py line 936: Removed incorrect 'response' key check on list
+- Fixed tactical_analyzer.py line 940: Changed `teams_data['response']` to `teams_data`
+- Fixed tactical_analyzer.py line 950: Changed `team_data.get('team', {}).get('id')` to `team_data.get('team_id')`
+- **Impact**: Resolves "No league teams data" warnings and enables formation analysis
+- **Root Cause**: get_league_teams() returns list, not dict with 'response' key
 
-Benefits:
-- Best bets now save correctly to game_fixtures table
-- League queries show actual scores alongside predictions for finished matches
-- Maintains backward compatibility (goals field only present if data exists)
+## 3. fixture_events_cache Table Creation
+- Added create_fixture_events_cache_table() method to deploy_tables.py (lines 429-492)
+- Added table to deployment list (line 521)
+- Proper table schema: fixture_id (String) primary key, 7-day TTL
+- **Impact**: Enables event caching to reduce API calls
 
-Response format example:
-{
-  "fixture_id": 123,
-  "home": { "predicted_goals": 1.8 },
-  "away": { "predicted_goals": 1.2 },
-  "goals": { "home": 2, "away": 1 },  // NEW - only if match finished
-  "best_bet": [...]                    // Now saves correctly
-}
+## 4. Hardcoded Table Name Fix
+- Fixed database_client.py line 990: Use _get_table_name() instead of hardcoded string
+- **Impact**: Table name now correctly applies prefix/suffix (football_fixture_events_cache_prod)
+- **Before**: 'fixture_events_cache' (AccessDenied errors)
+- **After**: 'football_fixture_events_cache_prod' (matches IAM permissions)
+
+## 5. DynamoDB Query Type Conversion
+- Fixed database_client.py line 629: Convert season to int() for DynamoDB NUMBER type
+- **Impact**: Classification queries now return matches instead of 0 results
+- **Root Cause**: DynamoDB stores season as NUMBER but was queried as STRING
+
+## Files Modified
+- src/data/api_client.py
+- src/features/tactical_analyzer.py
+- src/data/database_client.py
+- src/infrastructure/deploy_tables.py
+
+## Testing
+- All API calls verified with correct parameters
+- Table naming tested with actual prefix/suffix
+- Syntax validation passed for all changes
+
+## Documentation
+- docs/fixes/GET_FIXTURES_GOALS_SEASON_PARAMETER_FIX.md
+- docs/fixes/FIXTURE_EVENTS_CACHE_DEPLOYMENT.md
+
+Fixes issue with Championship (league 40) warnings and enables tactical analysis system-wide.

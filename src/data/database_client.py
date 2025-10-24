@@ -614,20 +614,23 @@ def _query_completed_matches_from_db(team_id, league_id, season):
         # Query using country-league-index GSI
         matches = []
         last_evaluated_key = None
+        total_items_from_db = 0
+        items_after_team_filter = 0
         
         while True:
             query_params = {
                 'IndexName': 'country-league-index',
                 'KeyConditionExpression': Key('country').eq(country) & Key('league').eq(league_name),
-                'FilterExpression': 'attribute_exists(goals) AND season = :season AND (home.team_id = :team_id OR away.team_id = :team_id)',
+                'FilterExpression': 'attribute_exists(goals) AND season = :season',
                 'ExpressionAttributeValues': {
-                    ':season': season,
-                    ':team_id': team_id
+                    ':season': int(season)  # Convert to integer to match DynamoDB number type
                 },
-                'ProjectionExpression': 'fixture_id, home, away, goals, #ts, #dt, league_id, season',
+                'ProjectionExpression': 'fixture_id, #home, #away, goals, #ts, #dt, league_id, season',
                 'ExpressionAttributeNames': {
                     '#ts': 'timestamp',
-                    '#dt': 'date'
+                    '#dt': 'date',
+                    '#home': 'home',
+                    '#away': 'away'
                 }
             }
             
@@ -636,16 +639,29 @@ def _query_completed_matches_from_db(team_id, league_id, season):
             
             response = webFE_table.query(**query_params)
             
-            for item in response.get('Items', []):
+            items_in_response = response.get('Items', [])
+            total_items_from_db += len(items_in_response)
+            
+            for item in items_in_response:
                 # Extract match data
                 home_data = item.get('home', {})
                 away_data = item.get('away', {})
                 goals = item.get('goals', {})
                 
+                # Get team IDs
+                home_team_id = int(home_data.get('team_id', 0))
+                away_team_id = int(away_data.get('team_id', 0))
+                
+                # Filter in Python: only include matches involving this team
+                if home_team_id != team_id and away_team_id != team_id:
+                    continue
+                
+                items_after_team_filter += 1
+                
                 match = {
                     'fixture_id': int(item.get('fixture_id', 0)),
-                    'home_team_id': int(home_data.get('team_id', 0)),
-                    'away_team_id': int(away_data.get('team_id', 0)),
+                    'home_team_id': home_team_id,
+                    'away_team_id': away_team_id,
                     'home_goals': int(goals.get('home', 0)),
                     'away_goals': int(goals.get('away', 0)),
                     'timestamp': int(item.get('timestamp', 0)),
@@ -969,9 +985,10 @@ def get_cached_fixture_events(fixture_id):
     """
     try:
         from .api_client import get_fixture_events
+        from ..utils.constants import _get_table_name
 
         # Try to get from cache first
-        cache_table_name = 'fixture_events_cache'
+        cache_table_name = _get_table_name('fixture_events_cache')
 
         if dynamodb:
             try:

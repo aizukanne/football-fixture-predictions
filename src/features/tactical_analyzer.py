@@ -643,7 +643,7 @@ class TacticalAnalyzer:
                 season_year = int(season) if isinstance(season, str) else season
                 start_ts = int(datetime(season_year, 8, 1).timestamp())
                 end_ts = int(datetime.now().timestamp())
-                fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
+                fixtures = get_fixtures_goals(league_id, start_ts, end_ts, season)
 
                 # Filter for this team and get last 10
                 team_fixtures = [f for f in fixtures if
@@ -825,7 +825,7 @@ class TacticalAnalyzer:
             season_year = int(season) if isinstance(season, str) else season
             start_ts = int(datetime(season_year, 8, 1).timestamp())
             end_ts = int(datetime.now().timestamp())
-            all_fixtures = get_fixtures_goals(league_id, start_ts, end_ts)
+            all_fixtures = get_fixtures_goals(league_id, start_ts, end_ts, season)
 
             if not all_fixtures or not isinstance(all_fixtures, list):
                 logger.warning(f"No fixtures data for league {league_id}")
@@ -933,11 +933,12 @@ class TacticalAnalyzer:
             # Get all teams in the league
             teams_data = get_league_teams(league_id, season)
 
-            if not teams_data or 'response' not in teams_data:
+            if not teams_data:
                 logger.warning(f"No league teams data for league {league_id}")
                 return self._get_default_league_averages()
 
-            teams = teams_data['response']
+            # teams_data is already a list of teams from get_league_teams()
+            teams = teams_data
             if not teams:
                 return self._get_default_league_averages()
 
@@ -947,7 +948,7 @@ class TacticalAnalyzer:
             total_games_league = 0
 
             for team_data in teams[:20]:  # Limit to first 20 teams to reduce API calls
-                team_id = team_data.get('team', {}).get('id')
+                team_id = team_data.get('team_id')
                 if not team_id:
                     continue
 
