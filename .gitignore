@@ -64,6 +64,7 @@ logs/
 htmlcov/
 .tox/
 .hypothesis/
+tests/debug/
 
 # Documentation with Sensitive Data
 # These contain account numbers, keys, and configuration details
