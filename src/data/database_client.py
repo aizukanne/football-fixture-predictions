@@ -310,7 +310,7 @@ def fetch_league_fixtures(country, league_name, start_time, end_time):
             IndexName='country-league-index',
             KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
             FilterExpression=Key('timestamp').between(start_time, end_time),
-            ProjectionExpression='fixture_id, home, away, predictions, alternate_predictions, #date, #timestamp',
+            ProjectionExpression='fixture_id, home, away, goals, predictions, coordination_info, #date, #timestamp',
             ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'}
         )
         
@@ -322,13 +322,23 @@ def fetch_league_fixtures(country, league_name, start_time, end_time):
                 IndexName='country-league-index',
                 KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
                 FilterExpression=Key('timestamp').between(start_time, end_time),
-                ProjectionExpression='fixture_id, home, away, predictions, alternate_predictions, #date, #timestamp',
+                ProjectionExpression='fixture_id, home, away, goals, predictions, coordination_info, #date, #timestamp',
                 ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'},
                 ExclusiveStartKey=response['LastEvaluatedKey']
             )
             items.extend(response.get('Items', []))
         
-        return items
+        # Filter to only include completed fixtures (those with goals recorded)
+        # This prevents processing fixtures that haven't been played yet
+        completed_items = [
+            item for item in items
+            if 'goals' in item and
+               item['goals'].get('home') is not None and
+               item['goals'].get('away') is not None
+        ]
+        
+        print(f"Filtered {len(items)} fixtures to {len(completed_items)} completed matches for multiplier calculation")
+        return completed_items
         
     except Exception as e:
         print(f"Error fetching league fixtures: {e}")
@@ -467,25 +477,39 @@ def update_fixture_best_bet(fixture_id, best_bet_data):
         True if successful, False otherwise
     """
     try:
+        # Debug: Check table name being used
+        print(f"DEBUG: Using table: {webFE_table.table_name if webFE_table else 'NONE'}")
+
+        # Convert fixture_id to int (handles Decimal, str, int inputs)
+        fixture_id_int = int(fixture_id)
+
+        print(f"Querying for fixture_id: {fixture_id_int} (original type: {type(fixture_id).__name__})")
+
         # First query to get the timestamp
         response = webFE_table.query(
-            KeyConditionExpression=Key('fixture_id').eq(int(fixture_id)),
+            KeyConditionExpression=Key('fixture_id').eq(fixture_id_int),
             Limit=1
         )
 
         if not response['Items']:
-            print(f"No item found with fixture_id: {fixture_id}")
+            print(f"No item found with fixture_id: {fixture_id_int}")
             return False
 
-        # DynamoDB returns Decimal objects - convert to int for key matching
-        timestamp = int(response['Items'][0]['timestamp'])
+        item = response['Items'][0]
+
+        print(f"Found item with fixture_id: {fixture_id_int}")
+
+        # Key must match table schema: Only fixture_id for prod table
+        # timestamp is just a regular attribute, not part of the key
+        key = {
+            'fixture_id': fixture_id_int
+        }
+
+        print(f"Updating with key: {key} (type: {type(key['fixture_id']).__name__})")
 
         # Update the item with best_bet attribute
         update_response = webFE_table.update_item(
-            Key={
-                'fixture_id': int(fixture_id),
-                'timestamp': timestamp
-            },
+            Key=key,
             UpdateExpression="SET best_bet = :val, has_best_bet = :has_bet",
             ExpressionAttributeValues={
                 ':val': best_bet_data,
@@ -494,10 +518,12 @@ def update_fixture_best_bet(fixture_id, best_bet_data):
             ReturnValues="UPDATED_NEW"
         )
 
-        print(f"Successfully updated best bet for fixture {fixture_id}")
+        print(f"Successfully updated best bet for fixture {fixture_id_int}")
         return True
     except Exception as e:
         print(f"Error updating best bet for fixture {fixture_id}: {e}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         return False
 
 

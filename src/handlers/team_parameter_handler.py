@@ -15,6 +15,7 @@ from ..statistics.optimization import tune_weights_grid_team
 from ..data.database_client import put_team_parameters, fetch_league_fixtures
 from ..data.api_client import get_league_teams, get_league_start_date
 from ..utils.converters import convert_for_dynamodb
+from ..utils.constants import MINIMUM_GAMES_THRESHOLD
 from leagues import allLeagues
 
 
@@ -272,7 +273,7 @@ def process_single_league(league, force_recompute=False):
                 team_dict.pop('using_team_away', None)
                 
                 # Tune weights if we have enough data
-                if not team_dict.get('using_league_params', True) and team_games > 10:
+                if not team_dict.get('using_league_params', True) and team_games > MINIMUM_GAMES_THRESHOLD:
                     tune_results = tune_weights_grid_team(
                         team_scores_df,
                         team_dict,
@@ -295,7 +296,7 @@ def process_single_league(league, force_recompute=False):
                 multipliers = calculate_team_multipliers(team_id, league_fixtures)
                 
                 # Use league multipliers if insufficient data
-                if multipliers['sample_size'] < 10:
+                if multipliers['sample_size'] < MINIMUM_GAMES_THRESHOLD:
                     print(f"Insufficient prediction data for team {team_name}. Using league multipliers.")
                     multipliers = get_default_team_multipliers(league_params)
                 

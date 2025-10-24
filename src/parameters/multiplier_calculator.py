@@ -146,13 +146,26 @@ class MultiplierCalculator:
         total_fixtures = len(fixtures_data)
         
         for fixture in fixtures_data:
-            # Check for prediction metadata with version info
+            # Try multiple locations for architecture version
             prediction_metadata = fixture.get('prediction_metadata', {})
             fixture_version = prediction_metadata.get('architecture_version')
             
-            # If no version info, try legacy fields (for backward compatibility)
+            # If no version in prediction_metadata, check coordination_info
+            # This is where current system stores version information
             if not fixture_version:
-                # Look for version in other possible locations
+                coordination_info = fixture.get('coordination_info', {})
+                
+                # Try league coordination first (primary prediction)
+                league_coord = coordination_info.get('league_coordination', {})
+                fixture_version = league_coord.get('architecture_version')
+                
+                # Fallback to team coordination if league not available
+                if not fixture_version:
+                    team_coord = coordination_info.get('team_coordination', {})
+                    fixture_version = team_coord.get('architecture_version')
+            
+            # Final fallback: try legacy top-level field (backward compatibility)
+            if not fixture_version:
                 fixture_version = fixture.get('architecture_version')
             
             # Only include fixtures from the target version
