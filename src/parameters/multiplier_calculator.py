@@ -45,7 +45,7 @@ class MultiplierCalculator:
         # Configuration
         self.min_team_sample_size = MINIMUM_GAMES_THRESHOLD  # Use consistent threshold (6 games)
         self.min_league_sample_size = 30
-        self.max_adjustment = 0.5  # Maximum adjustment from 1.0
+        self.max_adjustment = 2.0  # Maximum adjustment from 1.0 (allows range [0.2, 3.0])
     
     def calculate_team_multipliers(self, team_id: int, fixtures_data: List[Dict], 
                                  version_filter: Optional[str] = None,
@@ -371,14 +371,16 @@ class MultiplierCalculator:
             return 1.0
         
         # Clamp raw ratio to reasonable bounds to prevent extreme multipliers
-        clamped_ratio = max(0.5, min(2.0, raw_ratio))
+        # Allow higher range to support final multipliers up to 3.0 after confidence weighting
+        clamped_ratio = max(0.2, min(4.0, raw_ratio))
         
         # Weight towards 1.0 based on confidence
         # Lower confidence = closer to 1.0 (more conservative)
         weighted_ratio = confidence * clamped_ratio + (1 - confidence) * 1.0
         
-        # Further clamp the final result
-        final_multiplier = max(1.0 - self.max_adjustment, 
+        # Further clamp the final result to reasonable bounds
+        # Lower bound capped at 0.2 to prevent division-by-zero-like scenarios
+        final_multiplier = max(0.2,
                               min(1.0 + self.max_adjustment, weighted_ratio))
         
         return final_multiplier
