@@ -513,10 +513,64 @@ class ConfidenceCalibrator:
         
         return adjustments
     
+    def _safe_convert_to_float(self, value, default: float = 0.5,
+                               categorical_mapping: Dict = None) -> float:
+        """
+        Safely convert a value to float, handling categorical strings.
+        
+        Args:
+            value: Value to convert (can be numeric or categorical string)
+            default: Default value if conversion fails
+            categorical_mapping: Optional mapping for categorical values
+        
+        Returns:
+            Float value
+        """
+        # Default categorical mapping
+        if categorical_mapping is None:
+            categorical_mapping = {
+                'low': 0.3,
+                'medium': 0.5,
+                'high': 0.7,
+                'very_low': 0.1,
+                'very_high': 0.9
+            }
+        
+        # If already numeric, return as float
+        if isinstance(value, (int, float)):
+            return float(value)
+        
+        # If string, try categorical mapping first
+        if isinstance(value, str):
+            value_lower = value.lower().strip()
+            if value_lower in categorical_mapping:
+                return categorical_mapping[value_lower]
+            
+            # Try direct float conversion as fallback
+            try:
+                return float(value)
+            except ValueError:
+                logger.warning(f"Could not convert '{value}' to float, using default {default}")
+                return default
+        
+        # For other types, try direct conversion
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert {type(value).__name__} to float, using default {default}")
+            return default
+    
     def _calculate_data_quality_adjustment(self, context_factors: Dict) -> float:
         """Calculate confidence adjustment based on data quality."""
-        data_completeness = context_factors.get('data_completeness', 1.0)
-        data_freshness = context_factors.get('data_freshness', 1.0)
+        # Safely convert values, handling both numeric and categorical strings
+        data_completeness = self._safe_convert_to_float(
+            context_factors.get('data_completeness', 1.0),
+            default=1.0
+        )
+        data_freshness = self._safe_convert_to_float(
+            context_factors.get('data_freshness', 1.0),
+            default=1.0
+        )
         
         # Lower confidence with incomplete or stale data
         quality_score = (data_completeness * 0.6 + data_freshness * 0.4)
@@ -524,7 +578,11 @@ class ConfidenceCalibrator:
     
     def _calculate_historical_adjustment(self, context_factors: Dict) -> float:
         """Calculate adjustment based on historical accuracy for similar scenarios."""
-        historical_accuracy = context_factors.get('historical_accuracy', 0.75)
+        # Safely convert value, handling both numeric and categorical strings
+        historical_accuracy = self._safe_convert_to_float(
+            context_factors.get('historical_accuracy', 0.75),
+            default=0.75
+        )
         
         # Adjust confidence based on historical performance
         # Map accuracy to confidence multiplier
@@ -539,7 +597,11 @@ class ConfidenceCalibrator:
     
     def _calculate_model_uncertainty_adjustment(self, context_factors: Dict) -> float:
         """Calculate adjustment based on model uncertainty estimates."""
-        model_uncertainty = context_factors.get('model_uncertainty', 0.2)
+        # Safely convert value, handling both numeric and categorical strings
+        model_uncertainty = self._safe_convert_to_float(
+            context_factors.get('model_uncertainty', 0.2),
+            default=0.2
+        )
         
         # Higher uncertainty = lower confidence
         return max(0.6, 1.0 - model_uncertainty)

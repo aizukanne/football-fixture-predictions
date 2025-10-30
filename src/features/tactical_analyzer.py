@@ -755,13 +755,13 @@ class TacticalAnalyzer:
                         continue
 
                     event_team_id = event.get('team', {}).get('id')
+                    detail = event.get('detail', '')  # Get detail at the start for all events
 
                     # Goals scored by our team
                     if event_team_id == team_id:
                         total_goals += 1
 
                         # Check goal type
-                        detail = event.get('detail', '')
                         if detail == 'Penalty':
                             penalty_goals += 1
 
@@ -776,7 +776,7 @@ class TacticalAnalyzer:
                         if event.get('assist', {}).get('id'):
                             goals_with_assists += 1
 
-                    # Own goals conceded
+                    # Own goals conceded (opponent scored own goal benefiting our team)
                     elif detail == 'Own Goal':
                         own_goals_conceded += 1
 

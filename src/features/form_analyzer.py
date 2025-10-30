@@ -487,14 +487,19 @@ def get_team_season_matches(team_id: int, league_id: int, season: int) -> List[D
         return []
 
 
-def get_head_to_head_matches(home_team_id: int, away_team_id: int, 
+def get_head_to_head_matches(home_team_id: int, away_team_id: int,
                             league_id: int, season: int, years_back: int) -> List[Dict]:
     """Get head-to-head matches between two teams."""
     try:
         api_client = APIClient()
-        return api_client.get_head_to_head_matches(
-            home_team_id, away_team_id, league_id, years_back
-        )
+        # APIClient.get_head_to_head() doesn't support league_id or years_back parameters
+        # It returns the standard H2H data from the API
+        h2h_data = api_client.get_head_to_head(home_team_id, away_team_id)
+        
+        # Extract match history from the response
+        if h2h_data and isinstance(h2h_data, list):
+            return h2h_data
+        return []
     except Exception as e:
         print(f"Error getting H2H matches: {e}")
         return []

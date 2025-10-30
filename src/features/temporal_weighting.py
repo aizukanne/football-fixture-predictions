@@ -163,6 +163,10 @@ def calculate_fixture_congestion_impact(team_id: int, league_id: int, season: in
         Decimal: Congestion impact factor (0.95-1.0 range, where <1.0 = negative impact)
     """
     try:
+        # Normalize prediction_date to timezone-naive for consistent date comparisons
+        if prediction_date.tzinfo is not None:
+            prediction_date = prediction_date.replace(tzinfo=None)
+        
         # Get recent fixtures for congestion analysis
         recent_fixtures = get_recent_fixtures_for_congestion(
             team_id, league_id, season, prediction_date

@@ -20,6 +20,9 @@ NC='\033[0m'
 
 # Load environment
 source setup_deployment_env.sh
+# Disable AWS CLI pager to prevent interactive prompts
+export AWS_PAGER=""
+
 
 # Configuration
 ENVIRONMENT=${1:-prod}

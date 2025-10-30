@@ -45,7 +45,7 @@ class MultiplierCalculator:
         # Configuration
         self.min_team_sample_size = MINIMUM_GAMES_THRESHOLD  # Use consistent threshold (6 games)
         self.min_league_sample_size = 30
-        self.max_adjustment = 2.0  # Maximum adjustment from 1.0 (allows range [0.2, 3.0])
+        self.max_adjustment = 0.5  # Maximum adjustment from 1.0 (allows range [0.2, 1.5])
     
     def calculate_team_multipliers(self, team_id: int, fixtures_data: List[Dict], 
                                  version_filter: Optional[str] = None,
@@ -129,7 +129,7 @@ class MultiplierCalculator:
         
         return self._calculate_multipliers_from_data(league_data, min_sample_size, version_filter)
     
-    def _filter_fixtures_by_version(self, fixtures_data: List[Dict], 
+    def _filter_fixtures_by_version(self, fixtures_data: List[Dict],
                                    target_version: str) -> List[Dict]:
         """
         Filter fixtures to only include data from the specified architecture version.
@@ -145,6 +145,11 @@ class MultiplierCalculator:
         """
         filtered = []
         total_fixtures = len(fixtures_data)
+        no_version_count = 0
+        wrong_version_count = 0
+        
+        self.logger.info(f"🔍 Starting version filtering for v{target_version}")
+        self.logger.info(f"   Input fixtures: {total_fixtures}")
         
         for fixture in fixtures_data:
             # Try multiple locations for architecture version
@@ -174,11 +179,17 @@ class MultiplierCalculator:
                 filtered.append(fixture)
             elif not fixture_version:
                 # Handle legacy data without version info
+                no_version_count += 1
                 self.logger.debug(f"Fixture {fixture.get('fixture_id', 'unknown')} has no version info - skipping")
             else:
+                wrong_version_count += 1
                 self.logger.debug(f"Fixture {fixture.get('fixture_id', 'unknown')} version {fixture_version} != target {target_version} - skipping")
         
-        self.logger.info(f"Filtered fixtures: {len(filtered)}/{total_fixtures} match version {target_version}")
+        self.logger.info(f"✅ Version filtering complete:")
+        self.logger.info(f"   Input fixtures: {total_fixtures}")
+        self.logger.info(f"   Matched v{target_version}: {len(filtered)}")
+        self.logger.info(f"   No version info: {no_version_count}")
+        self.logger.info(f"   Wrong version: {wrong_version_count}")
         return filtered
     
     def _extract_team_data(self, team_id: int, fixtures_data: List[Dict]) -> Dict:
@@ -190,9 +201,17 @@ class MultiplierCalculator:
         total_goals_predicted = []
         total_goals_actual = []
         
+        self.logger.info(f"📊 Extracting data for team {team_id}")
+        self.logger.info(f"   Input fixtures: {len(fixtures_data)}")
+        
+        invalid_count = 0
+        home_match_count = 0
+        away_match_count = 0
+        
         # Process team as home team
         for item in fixtures_data:
             if not self._is_valid_fixture(item):
+                invalid_count += 1
                 continue
                 
             # Check if team is home team
@@ -207,6 +226,7 @@ class MultiplierCalculator:
                     home_goals_actual.append(actual_home)
                     total_goals_predicted.append(pred_home + pred_away)
                     total_goals_actual.append(actual_home + actual_away)
+                    home_match_count += 1
                 except (KeyError, ValueError, TypeError) as e:
                     self.logger.debug(f"Error processing home fixture: {e}")
                     continue
@@ -223,9 +243,16 @@ class MultiplierCalculator:
                     away_goals_actual.append(actual_away)
                     total_goals_predicted.append(pred_home + pred_away)
                     total_goals_actual.append(actual_home + actual_away)
+                    away_match_count += 1
                 except (KeyError, ValueError, TypeError) as e:
                     self.logger.debug(f"Error processing away fixture: {e}")
                     continue
+        
+        self.logger.info(f"✅ Extraction complete:")
+        self.logger.info(f"   Home matches: {home_match_count}")
+        self.logger.info(f"   Away matches: {away_match_count}")
+        self.logger.info(f"   Invalid fixtures: {invalid_count}")
+        self.logger.info(f"   Total matches for team: {home_match_count + away_match_count}")
         
         return {
             'home_goals_predicted': home_goals_predicted,
@@ -295,7 +322,7 @@ class MultiplierCalculator:
         
         return True
     
-    def _calculate_multipliers_from_data(self, data: Dict, min_sample_size: int, 
+    def _calculate_multipliers_from_data(self, data: Dict, min_sample_size: int,
                                        version: str) -> Dict:
         """Calculate multipliers from extracted prediction vs actual data."""
         home_predicted = data['home_goals_predicted']
@@ -307,12 +334,15 @@ class MultiplierCalculator:
         
         sample_size = len(home_predicted) + len(away_predicted)
         
-        self.logger.info(f'Sample size for version {version}: {sample_size}')
+        self.logger.info(f'📊 Calculating multipliers for version {version}')
+        self.logger.info(f'   Sample size: {sample_size} (min required: {min_sample_size})')
+        self.logger.info(f'   Home matches: {len(home_predicted)}, Away matches: {len(away_predicted)}')
         
         # Check if we have sufficient data
         if sample_size < min_sample_size:
-            self.logger.warning(f"Insufficient sample size: {sample_size} < {min_sample_size}")
+            self.logger.warning(f"⚠️  Insufficient sample size: {sample_size} < {min_sample_size}")
             confidence = max(sample_size / min_sample_size, 0.1)
+            self.logger.info(f"   Returning default multipliers with confidence: {confidence}")
             return self._get_default_multipliers(sample_size, "insufficient_sample_size", confidence)
         
         # Calculate ratios carefully handling empty lists and division by zero
@@ -325,19 +355,39 @@ class MultiplierCalculator:
         raw_away_ratio = np.mean(away_ratios) if away_ratios else 1.0
         raw_total_ratio = np.mean(total_ratios) if total_ratios else 1.0
 
+        self.logger.info(f'📈 Raw Ratios (Actual/Predicted):')
+        self.logger.info(f'   Home: {raw_home_ratio:.4f}')
+        self.logger.info(f'   Away: {raw_away_ratio:.4f}')
+        self.logger.info(f'   Total: {raw_total_ratio:.4f}')
+
         # Calculate standard deviations for confidence estimation
         home_std = np.std(home_ratios) if len(home_ratios) > 1 else 0.5
         away_std = np.std(away_ratios) if len(away_ratios) > 1 else 0.5
         total_std = np.std(total_ratios) if len(total_ratios) > 1 else 0.5
+
+        self.logger.info(f'📉 Standard Deviations:')
+        self.logger.info(f'   Home: {home_std:.4f}')
+        self.logger.info(f'   Away: {away_std:.4f}')
+        self.logger.info(f'   Total: {total_std:.4f}')
 
         # Adjust confidence based on sample size and variance
         variance_penalty = min(1.0, 1.0 / (1.0 + math.log(1 + total_std)))
         sample_confidence = min(1.0, sample_size / min_sample_size)
         confidence = min(sample_confidence * variance_penalty * 2, 0.8)
 
+        self.logger.info(f'🎯 Confidence Calculation:')
+        self.logger.info(f'   Variance Penalty: {variance_penalty:.4f}')
+        self.logger.info(f'   Sample Confidence: {sample_confidence:.4f}')
+        self.logger.info(f'   Final Confidence: {confidence:.4f}')
+
         # Calculate final multipliers with confidence weighting
+        self.logger.info(f'\n🏠 Calculating HOME multiplier:')
         home_multiplier = self._confidence_weighted_multiplier(raw_home_ratio, confidence)
+        
+        self.logger.info(f'\n✈️  Calculating AWAY multiplier:')
         away_multiplier = self._confidence_weighted_multiplier(raw_away_ratio, confidence)
+        
+        self.logger.info(f'\n⚽ Calculating TOTAL multiplier:')
         total_multiplier = self._confidence_weighted_multiplier(raw_total_ratio, confidence)
 
         return {
@@ -368,6 +418,7 @@ class MultiplierCalculator:
             Confidence-weighted multiplier
         """
         if confidence <= 0:
+            self.logger.info(f"🔴 Zero confidence - returning 1.0")
             return 1.0
         
         # Clamp raw ratio to reasonable bounds to prevent extreme multipliers
@@ -382,6 +433,18 @@ class MultiplierCalculator:
         # Lower bound capped at 0.2 to prevent division-by-zero-like scenarios
         final_multiplier = max(0.2,
                               min(1.0 + self.max_adjustment, weighted_ratio))
+        
+        # DETAILED DIAGNOSTIC LOGGING
+        self.logger.info(
+            f"🔍 Multiplier Calculation Breakdown:\n"
+            f"   Raw Ratio: {raw_ratio:.4f}\n"
+            f"   Clamped Ratio: {clamped_ratio:.4f} (max allowed: 4.0)\n"
+            f"   Confidence: {confidence:.4f}\n"
+            f"   Weighted Ratio: {weighted_ratio:.4f} = ({confidence:.4f} * {clamped_ratio:.4f}) + ({1-confidence:.4f} * 1.0)\n"
+            f"   Max Adjustment: {self.max_adjustment:.4f}\n"
+            f"   Upper Bound: {1.0 + self.max_adjustment:.4f}\n"
+            f"   Final Multiplier: {final_multiplier:.4f}"
+        )
         
         return final_multiplier
     
@@ -405,13 +468,13 @@ class MultiplierCalculator:
 
 # Convenience functions for external use
 
-def calculate_team_multipliers(team_id: int, fixtures_data: List[Dict], 
+def calculate_team_multipliers(team_id: int, fixtures_data: List[Dict],
                              version_filter: Optional[str] = None,
-                             min_sample_size: int = 15) -> Dict:
+                             min_sample_size: int = 6) -> Dict:
     """
     Convenience function to calculate team multipliers with version filtering.
     
-    CRITICAL: This prevents multiplier contamination by ensuring only 
+    CRITICAL: This prevents multiplier contamination by ensuring only
     same-version multipliers are used for calculations.
     
     Args:
@@ -419,7 +482,7 @@ def calculate_team_multipliers(team_id: int, fixtures_data: List[Dict],
         fixtures_data: List of fixture data
         version_filter: Only use multipliers from this architecture version
                        If None, uses current system version
-        min_sample_size: Minimum matches required
+        min_sample_size: Minimum matches required (default: 6 for early season)
         
     Returns:
         dict: Team multipliers with version metadata
