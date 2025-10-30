@@ -149,18 +149,20 @@ def process_fixtures(fixtures):
 
             # Get venue information
             try:
-                venue_ids = get_venue_id(home_team_id, league_id, season)
-                print(f"DEBUG: venue_ids type={type(venue_ids)}, value={venue_ids}")
-                
-                # Extract integer venue_id if dict is returned
-                if isinstance(venue_ids, dict):
-                    venue_id_int = venue_ids.get('venue_id')
-                    print(f"DEBUG: Extracted venue_id={venue_id_int} from dict")
-                    venue_ids = venue_id_int
-                    
+                venue_info = get_venue_id(home_team_id, league_id, season)
+                print(f"DEBUG: venue_info type={type(venue_info)}, value={venue_info}")
+
+                # Extract integer venue_id for prediction calculations
+                if isinstance(venue_info, dict):
+                    venue_id_for_prediction = venue_info.get('venue_id')
+                    print(f"DEBUG: Extracted venue_id={venue_id_for_prediction} from dict for predictions")
+                else:
+                    venue_id_for_prediction = venue_info
+
             except Exception as e:
                 print(f"Warning: Could not get venue ID for fixture {fixture_id}: {e}")
-                venue_ids = None
+                venue_info = None
+                venue_id_for_prediction = None
 
             # Fetch team match data
             home_team_parameters, home_match_details = fetch_team_match_data(
@@ -194,7 +196,7 @@ def process_fixtures(fixtures):
             try:
                 print("=== CALCULATING COORDINATED PREDICTIONS (LEAGUE PARAMETERS) ===")
                 
-                print(f"DEBUG: Calling league prediction with venue_id={venue_ids}, prediction_date type={type(date_dt)}")
+                print(f"DEBUG: Calling league prediction with venue_id={venue_id_for_prediction}, prediction_date type={type(date_dt)}")
                 (home_score_league, home_goals_league, hg_likelihood_league, home_probs_league,
                  away_score_league, away_goals_league, ag_likelihood_league, away_probs_league,
                  league_coordination_info) = calculate_coordinated_predictions(
@@ -202,7 +204,7 @@ def process_fixtures(fixtures):
                     season=season,
                     home_team_id=home_team_id,
                     away_team_id=away_team_id,
-                    venue_id=venue_ids,
+                    venue_id=venue_id_for_prediction,
                     prediction_date=date_dt
                 )
                 
@@ -254,7 +256,7 @@ def process_fixtures(fixtures):
             try:
                 print("=== CALCULATING COORDINATED PREDICTIONS (TEAM PARAMETERS) ===")
                 
-                print(f"DEBUG: Calling team prediction with venue_id={venue_ids}, prediction_date type={type(date_dt)}")
+                print(f"DEBUG: Calling team prediction with venue_id={venue_id_for_prediction}, prediction_date type={type(date_dt)}")
                 (home_score_team, home_goals_team, hg_likelihood_team, home_probs_team,
                  away_score_team, away_goals_team, ag_likelihood_team, away_probs_team,
                  team_coordination_info) = calculate_coordinated_predictions(
@@ -262,7 +264,7 @@ def process_fixtures(fixtures):
                     season=season,
                     home_team_id=home_team_id,
                     away_team_id=away_team_id,
-                    venue_id=venue_ids,
+                    venue_id=venue_id_for_prediction,
                     prediction_date=date_dt
                 )
 
@@ -355,7 +357,7 @@ def process_fixtures(fixtures):
                 "home": home_team_stats,
                 "away": away_team_stats,
                 "h2h": headtohead,
-                "venue": venue_ids,
+                "venue": venue_info,
                 "date": date,
                 "predictions": prediction_summary,
                 "alternate_predictions": prediction_summary_alt,

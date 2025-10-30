@@ -535,9 +535,17 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
         
         # 3. Fetch weather data - check multiple possible venue paths
         venue_info = fixture_data.get('venue', {})
-        venue_city = venue_info.get('city') or venue_info.get('name', '').split(',')[0].strip()
+
+        # Handle venue being either a dict or a numeric ID (for backward compatibility with old records)
+        if isinstance(venue_info, dict):
+            venue_city = venue_info.get('venue_city') or venue_info.get('venue_name', '').split(',')[0].strip()
+        else:
+            # Old record with venue stored as ID only - cannot extract city
+            print(f"Warning: venue stored as ID ({venue_info}) in old record format, cannot extract city for weather")
+            venue_city = None
+
         timestamp = fixture_data.get('timestamp') or fixture_data.get('fixture', {}).get('timestamp', 0)
-        
+
         print(f"Venue info: {venue_info}")
         print(f"Extracted venue_city: {venue_city}, timestamp: {timestamp}")
         
