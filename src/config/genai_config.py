@@ -61,6 +61,7 @@ The Ansatz points system offers a more nuanced view of performance reliability t
 The Poisson model's goal predictions and scoring probabilities are statistically sound indicators.
 
 Then follow these steps to evaluate the data in a meticulous, structured and methodical manner to analyse the data step by step, outlining your chain of thought to show how you considered the information.
+
 Evaluation Steps:
 1. Analyze team classification, tactical identity, and playing style archetype
 2. Assess tactical capabilities, defensive strength, and formation consistency
@@ -72,9 +73,12 @@ Evaluation Steps:
 8. Analyze venue-specific performance and away resilience
 9. Factor in contextual elements like weather and next fixtures
 10. Review current form trajectory, momentum, and head-to-head results
-11. Validate prediction inputs and evaluate statistical predictions through the complete reliability framework
-12. Cross-check predictions against underlying team capabilities
-13. Synthesize all findings into a final prediction and betting advice
+11. Synthesize all findings from steps 1-10 to formulate your own independent predictions for:
+    - Match outcome (Home Win/Draw/Away Win) 
+    - Goal totals and Over/Under 2.5 markets
+    - Confidence levels based on data quality and alignment
+12. After completing your independent analysis, evaluate the provided model predictions (primary and alternate) using the complete reliability framework
+13. Compare your independent predictions with the model predictions, identify key agreements or discrepancies, and provide a final synthesized recommendation
 
 Team Classification & Tactical Identity
     Examine each team's playing style archetype (balanced, attacking, defensive, possession_based) 
@@ -121,8 +125,8 @@ Ansatz Points & Home/Away Performance
     If a team's home performance significantly exceeds the opponent's away performance (or vice versa), note this as a strong indicator of potential outcome.
         
 Goal Predictions & Poisson Modeling  
-    Examine each team’s predicted_goals and probability_to_score (from Poisson model).
-    Evaluate the probability to score like digital logic. A low probability to score < 10% and a high probability to score > 85%. Anything in between is in a transition zone and therefore ambiguous since events during the game can push it in one direction or other. Foe example a key player gets injured or one team gets a yellow card.
+    Examine each team's predicted_goals and probability_to_score (from Poisson model).
+    Evaluate the probability to score like digital logic. A low probability to score < 10% and a high probability to score > 85%. Anything in between is in a transition zone and therefore ambiguous since events during the game can push it in one direction or other. For example a key player gets injured or one team gets a yellow card.
     Cross-reference these predictions with ansatz performance. Alignment here increases confidence in the outcome.
         
 Injury Impact  
@@ -213,6 +217,41 @@ Current Form Trajectory & Momentum
         long-term trajectory
 
 Predictions
+
+Independent Prediction Formation (Complete This First):
+    Before examining any provided model predictions, you must formulate your own 
+    independent assessment based on all data analyzed in steps 1-10.
+    
+    Your Independent Match Outcome Prediction:
+        Based on the complete picture from team classification, tactical capabilities,
+        Ansatz points, venue performance, injuries, form trajectory, and all contextual
+        factors, determine:
+        
+        - Most likely outcome: Home Win / Draw / Away Win
+        - Confidence level (1-10) for this outcome
+        - Key factors driving your prediction
+        - Alternative scenarios and their likelihoods
+    
+    Your Independent Goal Market Prediction:
+        Estimate the expected goal range for each team based on:
+        - Attacking intensity vs defensive solidity matchup
+        - Recent scoring patterns and form
+        - Venue effects and historical performance
+        - Tactical archetype interactions
+        
+        Formulate predictions for:
+        - Expected total goals in the match
+        - Over/Under 2.5 goals assessment with confidence
+        - Both teams to score likelihood
+    
+    Document your reasoning: Explicitly state which factors from your analysis
+    (steps 1-10) were most influential in forming these predictions. This creates
+    your baseline before evaluating model outputs.
+
+Model Prediction Evaluation (Complete This Second):
+    Only after completing your independent prediction above, now examine the 
+    provided model predictions from the data.
+    
     Evaluate the predictions generated from statistical analysis. 
     Our focus is on key markets: Match outcome (home win, draw, away win), double chance (home or draw, away or draw), over/under goals, and both teams to score (btts) for all betting analysis.   
     The prediction_accuracy_metrics provides comprehensive data on prediction reliability across multiple dimensions. You must evaluate three critical metrics together to understand the true reliability of predictions:
@@ -351,10 +390,42 @@ Reliability Assessment Protocol:
         If one or both teams are in Scenario Three, acknowledge inherent unpredictability but note that predictions account for this.
         State explicitly whether the fixture is suitable for betting recommendations or should be flagged as too uncertain.
 
+Comparative Analysis (Complete This Third):
+    Now systematically compare your independent predictions with the model predictions:
+    
+    Agreement Assessment:
+        - Do your outcome predictions align with the model's primary prediction?
+        - Do your goal estimates fall within the model's predicted ranges?
+        - Are confidence levels comparable between your analysis and model reliability metrics?
+    
+    Discrepancy Investigation:
+        If your predictions differ from the model:
+        - Identify which specific factors led to the divergence
+        - Did you weight certain elements (injuries, form, venue) more heavily than the model?
+        - Does the model's reliability framework (variance, std dev, raw ratios) suggest 
+          it may be missing factors you identified?
+        - Are there red flags in the model metrics (Scenario 2 or 4) that support your 
+          alternative view?
+    
+    Synthesized Final Position:
+        Based on the comparison:
+        - If predictions align and model shows high reliability: Reinforce with increased confidence
+        - If predictions align but model shows reliability concerns: Maintain your view with caution
+        - If predictions diverge and model is reliable: Explain the discrepancy and adjust confidence
+        - If predictions diverge and model is unreliable: Favor your independent analysis with 
+          clear explanation of model limitations
+        
+        Your final recommendations must transparently explain how you weighted your own
+        analysis against the model predictions and why.
+
 Final Analysis:    
-    Begin by reviewing your Reliability Assessment Protocol analysis from the previous 
-    section. Your betting recommendations must be calibrated to the reliability profile 
-    of both teams.
+    Begin by reviewing both your independent predictions from step 11 and the 
+    Reliability Assessment Protocol analysis you completed for the model predictions.
+    
+    Your betting recommendations must synthesize:
+    1. The insights from your independent analysis (steps 1-10)
+    2. The reliability profile of both teams from model evaluation
+    3. The comparative assessment showing agreements and discrepancies
     
     If you identified either team as Scenario Two (Model Inadequacy) or Scenario Four 
     (Worst Case), you must either avoid recommendations for that fixture entirely or 
@@ -406,32 +477,37 @@ Final Analysis:
             Scores 8-10 (High Confidence):
                 - Both teams show low variance AND low standard deviation (Scenario One)
                 - Strong alignment across all capability indicators
+                - Your independent analysis strongly aligns with model predictions
                 - Clear outcome classification
                 - League conformance supports the prediction
             
             Scores 5-7 (Moderate Confidence):
                 - One or both teams show high variance but low std dev (Scenario Three)
                 - Reasonable alignment across most capability indicators
+                - Some divergence between your analysis and model predictions, but explainable
                 - Some inherent unpredictability acknowledged
                 - Issue prominent warnings about outcome variability despite model reliability
             
             Scores 3-4 (Low Confidence):
                 - Either team shows Scenario Two or Four red flag combinations
                 - Contradictions between capability indicators and predictions
+                - Significant divergence between your independent analysis and model
                 - Dicey outcome classification
                 - Must include strong warnings that predictions may be fundamentally unreliable
             
             Scores 1-2 (Minimal Confidence):
                 - Both teams show Scenario Four characteristics
                 - Multiple critical red flags identified
+                - Major contradictions between your analysis and model
                 - Recommend avoiding this fixture for betting purposes
         
         Prediction Prioritization:
             Give priority to markets where:
-            1. League conformance data shows strong historical performance
-            2. Both teams show favorable variance-std dev profiles (Scenarios One or Three)
-            3. Capability cross-check confirms logical alignment
-            4. Prediction accuracy metrics indicate reliability
+            1. Your independent analysis and model predictions converge
+            2. League conformance data shows strong historical performance
+            3. Both teams show favorable variance-std dev profiles (Scenarios One or Three)
+            4. Capability cross-check confirms logical alignment
+            5. Prediction accuracy metrics indicate reliability
             
             League conformance is a validation tool, not a primary driver. Do not recommend 
             a market solely because league conformance is high when statistical analysis 
@@ -444,6 +520,7 @@ Final Analysis:
             
             Double Chance (Home or Draw / Away or Draw) is safer than straight win unless:
             - All indicators strongly converge on one outcome
+            - Both your independent analysis and model agree
             - Reliability assessment shows Scenario One for both teams
             - Capability cross-check reveals significant differential
             - No contradictory signals exist
@@ -486,16 +563,20 @@ Final Analysis:
             - Note any league conformance anomalies or contradictions
             - Warn about inherent team unpredictability where applicable
             - Flag model inadequacy scenarios prominently
+            - Explain any significant divergence between your independent analysis and model predictions
             
             Users must be fully aware of risks before acting on any recommendation.
         
         Final Recommendation Format:
             For each recommended market, provide:
             1. The specific prediction
-            2. Confidence score (1-10) with justification
-            3. Brief supporting explanation referencing key analytical factors
+            2. Confidence score (1-10) with justification referencing both your independent 
+               analysis and model agreement/disagreement
+            3. Brief supporting explanation referencing key analytical factors from both perspectives
             4. Any relevant warnings or risk factors
             5. Whether this is a primary recommendation or conservative hedge
+            6. Explicit statement of whether your independent view aligns with or differs from 
+               the model prediction
 """
 
 def get_active_provider():

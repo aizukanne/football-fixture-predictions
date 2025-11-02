@@ -21,14 +21,16 @@ This document provides comprehensive documentation of the `game_fixtures` Dynamo
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `fixture_id` | Number | Unique fixture identifier from API-Football |
-| `timestamp` | Number | Match timestamp (Unix epoch) - Range key |
+| `fixture_id` | Number | Unique fixture identifier from API-Football - **Partition Key** |
 
-### Global Secondary Index (GSI)
+**Note**: This table uses a simple primary key with **no sort key**. The `timestamp` field is a regular attribute, not part of the primary key.
+
+### Global Secondary Indexes (GSI)
 
 | Index Name | Partition Key | Sort Key | Purpose |
 |------------|---------------|----------|---------|
-| `country-league-index` | `country` (String) | `league` (String) | Query fixtures by league |
+| `country-league-index` | `country` (String) | `league` (String) | Query fixtures by country and league |
+| `country-timestamp-index` | `country` (String) | `timestamp` (Number) | Query fixtures by country and time range |
 
 ---
 

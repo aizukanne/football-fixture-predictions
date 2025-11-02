@@ -78,8 +78,11 @@ def get_segmented_params(team_params, opponent_team_id, league_id, season):
         
         if segment_key in segmented_params:
             selected_params = segmented_params[segment_key]
+            # Merge base parameters with tier-specific parameters
+            # This ensures required Phase 0 parameters (k_goals, k_score, etc.) are always present
+            merged_params = {**team_params, **selected_params}
             print(f"Using {segment_key} parameters for opponent {opponent_team_id} (tier: {opponent_tier})")
-            return selected_params
+            return merged_params
         else:
             print(f"Segmented parameters not available for {segment_key}, using overall parameters")
             return team_params

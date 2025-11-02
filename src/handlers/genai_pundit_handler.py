@@ -522,7 +522,7 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
         if not fixture_data:
             print(f"No fixture data found for fixture_id: {fixture_id}")
             return None
-        
+
         print("Fixture data loaded successfully")
         
         # 2. Extract team and league IDs
@@ -573,9 +573,8 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
         if not home_params_raw or not away_params_raw:
             print("Warning: Team parameters not found")
             return None
-        
+
         # Convert Decimal to float for JSON serialization
-        from ..utils.converters_lite import decimal_to_float
         home_params = decimal_to_float(home_params_raw)
         away_params = decimal_to_float(away_params_raw)
         
@@ -614,13 +613,15 @@ def generate_fixture_analysis(fixture_id: int) -> Optional[dict]:
                 'parameters': away_params,  # Complete raw parameters
                 'standings': away_standings if away_standings else {}
             },
-            'match_predictions': fixture_data.get('predictions', {}),
+            'primary_predictions': fixture_data.get('predictions', {}),
+            'alt_predictions': fixture_data.get('alternate_predictions', {}),
             'league_parameters': league_params,  # Complete league parameters
             'weather': weather_data if weather_data else fixture_data.get('weather', {})
         }
-        
-        print("AI context built with complete raw parameters")
-        
+
+        # Debug: Print AI context (convert Decimals for JSON serialization)
+        print(f"AI context: {json.dumps(decimal_to_float(context))}")
+
         # 9. Generate analysis with AI
         analysis_text, provider, generation_time_ms = ai_service.generate_analysis(context)
         

@@ -42,6 +42,59 @@ from ..features.strategy_router import calculate_adaptive_weights
 from ..features.archetype_analyzer import analyze_performance_consistency
 
 
+def calculate_robust_alpha(team_variance, team_mean, league_alpha, sample_size, min_samples=10):
+    """
+    Calculate robust alpha parameter with variance bounding and confidence blending.
+
+    This function improves upon the basic method-of-moments alpha calculation by:
+    1. Bounding extreme variance deviations from league norms
+    2. Blending team and league alpha based on sample size confidence
+    3. Preventing unrealistic alpha values for teams with unusual variance patterns
+
+    Args:
+        team_variance: Team's empirical variance
+        team_mean: Team's empirical mean (mu)
+        league_alpha: League's alpha parameter (baseline)
+        sample_size: Number of matches used to calculate team variance
+        min_samples: Minimum samples for full confidence (default: 10)
+
+    Returns:
+        Tuple of (robust_alpha, confidence_score)
+        - robust_alpha: Confidence-weighted and bounded alpha value
+        - confidence_score: Confidence in team alpha (0-1 scale)
+    """
+    # Calculate raw alpha using method of moments (same as current implementation)
+    if team_mean > 0:
+        raw_alpha = max((team_variance - team_mean) / team_mean**2, 0.01)
+    else:
+        raw_alpha = 0.1  # Fallback if mean is invalid
+
+    # Calculate confidence based on sample size
+    # Confidence scales linearly from 0 to 1 as samples go from 0 to min_samples
+    confidence = min(sample_size / min_samples, 1.0)
+
+    # Bound alpha to prevent extreme deviations from league baseline
+    # Teams can have alpha between 0.5x and 2.0x the league alpha
+    max_deviation_factor = 2.0
+    min_deviation_factor = 0.5
+
+    lower_bound = league_alpha * min_deviation_factor
+    upper_bound = league_alpha * max_deviation_factor
+
+    bounded_alpha = max(lower_bound, min(upper_bound, raw_alpha))
+
+    # Blend bounded alpha with league alpha based on confidence
+    # Low confidence (few matches) → closer to league alpha
+    # High confidence (many matches) → closer to team's bounded alpha
+    robust_alpha = confidence * bounded_alpha + (1 - confidence) * league_alpha
+
+    # Ensure final alpha is within reasonable absolute bounds
+    # Alpha represents overdispersion, should be positive and not excessively large
+    robust_alpha = max(0.01, min(2.0, robust_alpha))
+
+    return robust_alpha, confidence
+
+
 def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     """
     Calculate team-specific parameters from match data with version tracking, opponent stratification,
@@ -203,12 +256,26 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     if mu_away > 0:
         home_adv = mu_home / mu_away
     
-    # Calculate alpha parameters (overdispersion)
+    # Calculate alpha parameters (overdispersion) using robust method
     if using_team_home:
-        alpha_home = max((var_home - mu_home) / mu_home**2, 0) if mu_home > 0 else 0.1
-    
+        league_alpha_home_baseline = float(league_params.get('alpha_home', 0.1)) if league_params else 0.1
+        alpha_home, home_alpha_confidence = calculate_robust_alpha(
+            team_variance=var_home,
+            team_mean=mu_home,
+            league_alpha=league_alpha_home_baseline,
+            sample_size=len(g_home),
+            min_samples=MIN_HOME_MATCHES
+        )
+
     if using_team_away:
-        alpha_away = max((var_away - mu_away) / mu_away**2, 0) if mu_away > 0 else 0.1
+        league_alpha_away_baseline = float(league_params.get('alpha_away', 0.1)) if league_params else 0.1
+        alpha_away, away_alpha_confidence = calculate_robust_alpha(
+            team_variance=var_away,
+            team_mean=mu_away,
+            league_alpha=league_alpha_away_baseline,
+            sample_size=len(g_away),
+            min_samples=MIN_AWAY_MATCHES
+        )
     
     # Use weighted average for overall alpha
     if using_team_home or using_team_away:
@@ -611,14 +678,30 @@ def calculate_segment_parameters(df_segment, team_id, league_params, segment_nam
         mu_home = g_home.mean()
         var_home = g_home.var() if len(g_home) > 1 else 1.65
         p_score_home = (g_home > 0).mean()
-        alpha_home = max((var_home - mu_home) / mu_home**2, 0.01) if mu_home > 0 else 0.1
+        # Use robust alpha calculation for segment parameters
+        league_alpha_home_baseline = float(league_params.get('alpha_home', 0.1)) if league_params else 0.1
+        alpha_home, _ = calculate_robust_alpha(
+            team_variance=var_home,
+            team_mean=mu_home,
+            league_alpha=league_alpha_home_baseline,
+            sample_size=len(g_home),
+            min_samples=MIN_HOME_MATCHES
+        )
         using_segment_home = True
-    
+
     if len(g_away) >= MIN_AWAY_MATCHES:
         mu_away = g_away.mean()
         var_away = g_away.var() if len(g_away) > 1 else 1.3
         p_score_away = (g_away > 0).mean()
-        alpha_away = max((var_away - mu_away) / mu_away**2, 0.01) if mu_away > 0 else 0.1
+        # Use robust alpha calculation for segment parameters
+        league_alpha_away_baseline = float(league_params.get('alpha_away', 0.1)) if league_params else 0.1
+        alpha_away, _ = calculate_robust_alpha(
+            team_variance=var_away,
+            team_mean=mu_away,
+            league_alpha=league_alpha_away_baseline,
+            sample_size=len(g_away),
+            min_samples=MIN_AWAY_MATCHES
+        )
         using_segment_away = True
     
     # Calculate segment averages

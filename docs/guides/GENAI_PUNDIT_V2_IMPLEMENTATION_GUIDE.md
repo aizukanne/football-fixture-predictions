@@ -102,8 +102,10 @@ src/
 ### Required Tables
 
 #### 1. **game_fixtures** (Input)
-**Purpose**: Source of fixture data and predictions  
-**Key Schema**: `fixture_id` (partition key), `timestamp` (sort key)
+**Purpose**: Source of fixture data and predictions
+**Key Schema**: `fixture_id` (partition key only, no sort key)
+
+**Note**: The actual production table (`football_game_fixtures_prod`) uses only `fixture_id` as the partition key. The `timestamp` field is a regular attribute, not part of the primary key. Time-based queries use the `country-timestamp-index` GSI.
 
 **Critical Fields**:
 ```python
@@ -243,8 +245,10 @@ src/
 ```
 
 #### 4. **game_analysis** (Output)
-**Purpose**: Store AI-generated analysis  
+**Purpose**: Store AI-generated analysis
 **Key Schema**: `fixture_id` (partition key), `timestamp` (sort key)
+
+**Note**: The `game_analysis` table may use `timestamp` as a sort key to support multiple analyses per fixture over time. This differs from `game_fixtures` which uses only `fixture_id` as the partition key.
 
 **Output Structure**:
 ```python
