@@ -48,8 +48,8 @@ This document describes the automated EventBridge rules configured for the Footb
 
 **Purpose:** Update league-wide statistical parameters
 
-**Schedule:** Weekly on Sundays at 02:00 UTC
-**Expression:** `cron(0 2 ? * SUN *)`
+**Schedule:** Weekly on Wednesdays at 02:00 UTC
+**Expression:** `cron(0 2 ? * WED *)`
 
 **Target:** `football-league-parameter-updates` SQS queue → `football-league-parameter-handler-prod` Lambda
 
@@ -57,9 +57,9 @@ This document describes the automated EventBridge rules configured for the Footb
 ```json
 {
   "Name": "football-league-parameter-weekly-prod",
-  "ScheduleExpression": "cron(0 2 ? * SUN *)",
+  "ScheduleExpression": "cron(0 2 ? * WED *)",
   "State": "ENABLED",
-  "Description": "Weekly league parameter updates on Sundays at 02:00 UTC"
+  "Description": "Weekly league parameter updates on Wednesdays at 02:00 UTC"
 }
 ```
 
@@ -78,8 +78,8 @@ This document describes the automated EventBridge rules configured for the Footb
 
 **Purpose:** Update team-specific strength ratings and multipliers
 
-**Schedule:** Weekly on Sundays at 03:00 UTC (1 hour after league params)
-**Expression:** `cron(0 3 ? * SUN *)`
+**Schedule:** Weekly on Wednesdays at 03:00 UTC (1 hour after league params)
+**Expression:** `cron(0 3 ? * WED *)`
 
 **Target:** `football-team-parameter-dispatcher-prod` Lambda function
 
@@ -87,9 +87,9 @@ This document describes the automated EventBridge rules configured for the Footb
 ```json
 {
   "Name": "football-team-parameter-weekly-prod",
-  "ScheduleExpression": "cron(0 3 ? * SUN *)",
+  "ScheduleExpression": "cron(0 3 ? * WED *)",
   "State": "ENABLED",
-  "Description": "Weekly team parameter updates on Sundays at 03:00 UTC (after league params)"
+  "Description": "Weekly team parameter updates on Wednesdays at 03:00 UTC (after league params)"
 }
 ```
 
@@ -148,7 +148,7 @@ This document describes the automated EventBridge rules configured for the Footb
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                    WEEKLY SCHEDULE (Sundays)                 │
+│                   WEEKLY SCHEDULE (Wednesdays)               │
 │                                                             │
 │  02:00 UTC - League Parameter Updates ⭐                    │
 │              └─ Recalculate league baselines               │

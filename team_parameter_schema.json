@@ -1,0 +1,1108 @@
+{
+  "schema_version": "1.0.0",
+  "description": "Team parameter schema for football fixture prediction system. Defines all parameter fields, their ranges, scales, and interpretation guidelines for external systems.",
+  "phase_architecture": {
+    "description": "6-phase progressive enhancement architecture",
+    "phases": {
+      "phase_0": "Base statistical parameters (goals, probabilities, variance)",
+      "phase_1": "Opponent-segmented parameters (vs_top, vs_middle, vs_bottom)",
+      "phase_2": "Venue-specific analysis (home/away, stadium, travel)",
+      "phase_3": "Temporal factors (form, momentum, injuries, fixtures)",
+      "phase_4": "Tactical intelligence (formations, playing style, manager)",
+      "phase_5": "Team classification (archetypes, performance profiles)"
+    }
+  },
+
+  "scale_definitions": {
+    "probability": {
+      "_schema_path": "scale_definitions.probability",
+      "range": [0.0, 1.0],
+      "neutral": null,
+      "data_type": "float",
+      "interpretation": {
+        "0.0": "impossible/none/minimum",
+        "0.3": "low probability/weak",
+        "0.5": "moderate/average",
+        "0.7": "high probability/strong",
+        "1.0": "certain/maximum/excellent"
+      },
+      "description": "Standard probability or normalized score (0=worst, 1=best)"
+    },
+
+    "multiplier": {
+      "_schema_path": "scale_definitions.multiplier",
+      "range": [0.5, 1.5],
+      "neutral": 1.0,
+      "data_type": "float",
+      "interpretation": {
+        "0.5": "50% of baseline (severe underperformance)",
+        "0.8": "80% of baseline (below average)",
+        "1.0": "baseline/neutral (league average)",
+        "1.2": "120% of baseline (above average)",
+        "1.5": "150% of baseline (strong overperformance)"
+      },
+      "description": "Multiplicative adjustment factor, neutral at 1.0"
+    },
+
+    "extended_multiplier": {
+      "_schema_path": "scale_definitions.extended_multiplier",
+      "range": [0.7, 1.5],
+      "neutral": 1.0,
+      "data_type": "float",
+      "interpretation": {
+        "0.7": "70% of baseline (significant underperformance)",
+        "0.9": "90% of baseline (slight underperformance)",
+        "1.0": "baseline/neutral",
+        "1.2": "120% of baseline (above average)",
+        "1.5": "150% of baseline (strong advantage)"
+      },
+      "description": "Wider range multiplier for venue/resilience factors"
+    },
+
+    "goals_per_match": {
+      "_schema_path": "scale_definitions.goals_per_match",
+      "range": [0.0, 4.0],
+      "typical_range": [0.5, 3.0],
+      "neutral": 1.35,
+      "data_type": "float",
+      "interpretation": {
+        "0.5": "very weak attack",
+        "1.0": "below average attack",
+        "1.35": "league average",
+        "2.0": "strong attack",
+        "3.0": "elite attack"
+      },
+      "description": "Expected goals scored per match (Poisson parameter mu)"
+    },
+
+    "tactical_scale": {
+      "_schema_path": "scale_definitions.tactical_scale",
+      "range": [0.0, 10.0],
+      "neutral": 5.0,
+      "data_type": "float",
+      "interpretation": {
+        "0-2": "very low intensity/preference",
+        "3-4": "below average",
+        "5": "league average/neutral",
+        "6-7": "above average",
+        "8-10": "very high intensity/preference"
+      },
+      "description": "Tactical style metric on 0-10 scale, 5.0 is neutral/average"
+    },
+
+    "variance": {
+      "_schema_path": "scale_definitions.variance",
+      "range": [0.01, 4.0],
+      "typical_range": [0.05, 2.0],
+      "neutral": null,
+      "data_type": "float",
+      "interpretation": {
+        "0.01-0.1": "highly consistent/predictable",
+        "0.1-0.5": "moderate consistency",
+        "0.5-1.0": "variable performance",
+        "1.0+": "highly unpredictable"
+      },
+      "description": "Statistical variance or overdispersion parameter (alpha)"
+    },
+
+    "ratio": {
+      "_schema_path": "scale_definitions.ratio",
+      "range": [0.8, 2.0],
+      "neutral": 1.25,
+      "data_type": "float",
+      "interpretation": {
+        "0.8": "minimal advantage",
+        "1.0": "parity (no advantage)",
+        "1.25": "typical home advantage",
+        "1.5": "strong advantage",
+        "2.0": "dominant advantage"
+      },
+      "description": "Ratio comparisons like home_adv (mu_home/mu_away)"
+    },
+
+    "negative_impact": {
+      "_schema_path": "scale_definitions.negative_impact",
+      "range": [-0.3, 0.0],
+      "neutral": 0.0,
+      "data_type": "float",
+      "interpretation": {
+        "-0.3": "severe negative impact (30% reduction)",
+        "-0.2": "significant impact (20% reduction)",
+        "-0.1": "moderate impact (10% reduction)",
+        "0.0": "no impact"
+      },
+      "description": "Negative adjustment factors (e.g., injuries, suspensions)"
+    },
+
+    "prediction_weight": {
+      "_schema_path": "scale_definitions.prediction_weight",
+      "range": [0.5, 1.5],
+      "neutral": 1.0,
+      "data_type": "float",
+      "interpretation": {
+        "0.5": "reduced importance (50% weight)",
+        "1.0": "standard importance",
+        "1.5": "increased importance (150% weight)"
+      },
+      "description": "Weight for different prediction components in archetype models"
+    },
+
+    "count_unbounded": {
+      "_schema_path": "scale_definitions.count_unbounded",
+      "range": [0, null],
+      "neutral": null,
+      "data_type": "integer",
+      "description": "Non-negative integer with no theoretical upper limit"
+    },
+
+    "count_bounded": {
+      "_schema_path": "scale_definitions.count_bounded",
+      "data_type": "integer",
+      "description": "Non-negative integer with context-specific upper limit"
+    },
+
+    "boolean": {
+      "_schema_path": "scale_definitions.boolean",
+      "range": [false, true],
+      "data_type": "boolean",
+      "description": "Boolean flag"
+    },
+
+    "enum": {
+      "_schema_path": "scale_definitions.enum",
+      "data_type": "string",
+      "description": "Enumerated string value from predefined set"
+    },
+
+    "string": {
+      "_schema_path": "scale_definitions.string",
+      "data_type": "string",
+      "description": "Free-form text string"
+    },
+
+    "array": {
+      "_schema_path": "scale_definitions.array",
+      "data_type": "array",
+      "description": "Array/list of values"
+    }
+  },
+
+  "field_registry": {
+    "phase_0_base": {
+      "description": "Root-level base statistical parameters",
+      "fields": {
+        "mu": {
+          "_schema_path": "field_registry.phase_0_base.fields.mu",
+          "scale_type": "goals_per_match",
+          "range": [0.5, 3.0],
+          "default": 1.35,
+          "data_type": "float",
+          "description": "Average goals scored per match (overall)"
+        },
+        "mu_home": {
+          "_schema_path": "field_registry.phase_0_base.fields.mu_home",
+          "scale_type": "goals_per_match",
+          "range": [0.5, 3.5],
+          "default": 1.5,
+          "data_type": "float",
+          "description": "Average goals scored when playing at home"
+        },
+        "mu_away": {
+          "_schema_path": "field_registry.phase_0_base.fields.mu_away",
+          "scale_type": "goals_per_match",
+          "range": [0.3, 2.5],
+          "default": 1.2,
+          "data_type": "float",
+          "description": "Average goals scored when playing away"
+        },
+        "p_score": {
+          "_schema_path": "field_registry.phase_0_base.fields.p_score",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "default": 0.7,
+          "data_type": "float",
+          "description": "Probability of scoring at least one goal (overall)"
+        },
+        "p_score_home": {
+          "_schema_path": "field_registry.phase_0_base.fields.p_score_home",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "default": 0.75,
+          "data_type": "float",
+          "description": "Probability of scoring when playing at home"
+        },
+        "p_score_away": {
+          "_schema_path": "field_registry.phase_0_base.fields.p_score_away",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "default": 0.65,
+          "data_type": "float",
+          "description": "Probability of scoring when playing away"
+        },
+        "alpha": {
+          "_schema_path": "field_registry.phase_0_base.fields.alpha",
+          "scale_type": "variance",
+          "range": [0.01, 2.0],
+          "default": 0.1,
+          "data_type": "float",
+          "description": "Overdispersion parameter for goal variance (overall)"
+        },
+        "alpha_home": {
+          "_schema_path": "field_registry.phase_0_base.fields.alpha_home",
+          "scale_type": "variance",
+          "range": [0.01, 2.0],
+          "default": 0.1,
+          "data_type": "float",
+          "description": "Overdispersion parameter when playing at home"
+        },
+        "alpha_away": {
+          "_schema_path": "field_registry.phase_0_base.fields.alpha_away",
+          "scale_type": "variance",
+          "range": [0.01, 2.0],
+          "default": 0.1,
+          "data_type": "float",
+          "description": "Overdispersion parameter when playing away"
+        },
+        "variance_home": {
+          "_schema_path": "field_registry.phase_0_base.fields.variance_home",
+          "scale_type": "variance",
+          "range": [0.5, 4.0],
+          "data_type": "float",
+          "description": "Statistical variance in home goal scoring"
+        },
+        "variance_away": {
+          "_schema_path": "field_registry.phase_0_base.fields.variance_away",
+          "scale_type": "variance",
+          "range": [0.3, 3.5],
+          "data_type": "float",
+          "description": "Statistical variance in away goal scoring"
+        },
+        "home_adv": {
+          "_schema_path": "field_registry.phase_0_base.fields.home_adv",
+          "scale_type": "ratio",
+          "range": [0.8, 2.0],
+          "default": 1.25,
+          "data_type": "float",
+          "description": "Home advantage ratio (mu_home / mu_away)"
+        }
+      }
+    },
+
+    "multipliers": {
+      "description": "Correction multipliers from prediction vs actual result analysis",
+      "fields": {
+        "home_multiplier": {
+          "_schema_path": "field_registry.multipliers.fields.home_multiplier",
+          "scale_type": "multiplier",
+          "range": [0.5, 1.5],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Correction factor for home predictions"
+        },
+        "away_multiplier": {
+          "_schema_path": "field_registry.multipliers.fields.away_multiplier",
+          "scale_type": "multiplier",
+          "range": [0.5, 1.5],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Correction factor for away predictions"
+        },
+        "total_multiplier": {
+          "_schema_path": "field_registry.multipliers.fields.total_multiplier",
+          "scale_type": "multiplier",
+          "range": [0.5, 1.5],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Correction factor for total goals predictions"
+        },
+        "home_std": {
+          "_schema_path": "field_registry.multipliers.fields.home_std",
+          "scale_type": "variance",
+          "range": [0.1, 2.0],
+          "data_type": "float",
+          "description": "Standard deviation of home multipliers"
+        },
+        "away_std": {
+          "_schema_path": "field_registry.multipliers.fields.away_std",
+          "scale_type": "variance",
+          "range": [0.1, 2.0],
+          "data_type": "float",
+          "description": "Standard deviation of away multipliers"
+        },
+        "confidence": {
+          "_schema_path": "field_registry.multipliers.fields.confidence",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Confidence in multiplier calculation"
+        },
+        "sample_size": {
+          "_schema_path": "field_registry.multipliers.fields.sample_size",
+          "scale_type": "count_unbounded",
+          "range": [0, null],
+          "typical_max": 100,
+          "data_type": "integer",
+          "description": "Number of matches used for multiplier calculation"
+        }
+      }
+    },
+
+    "phase_1_segmented": {
+      "description": "Parameters segmented by opponent strength tier",
+      "structure": "Object with keys: vs_top, vs_middle, vs_bottom. Each contains phase_0_base fields plus segment-specific fields below.",
+      "opponent_tiers": {
+        "vs_top": "Against top 30% of teams in league",
+        "vs_middle": "Against middle 40% of teams in league",
+        "vs_bottom": "Against bottom 30% of teams in league"
+      },
+      "fields": {
+        "segment_sample_size": {
+          "_schema_path": "field_registry.phase_1_segmented.fields.segment_sample_size",
+          "scale_type": "count_unbounded",
+          "range": [0, null],
+          "typical_max": 50,
+          "data_type": "integer",
+          "description": "Number of matches in this opponent segment"
+        },
+        "using_segment_home": {
+          "_schema_path": "field_registry.phase_1_segmented.fields.using_segment_home",
+          "scale_type": "boolean",
+          "data_type": "boolean",
+          "description": "Whether segment-specific home data is used (vs league average)"
+        },
+        "using_segment_away": {
+          "_schema_path": "field_registry.phase_1_segmented.fields.using_segment_away",
+          "scale_type": "boolean",
+          "data_type": "boolean",
+          "description": "Whether segment-specific away data is used (vs league average)"
+        }
+      }
+    },
+
+    "phase_2_venue": {
+      "description": "Venue-specific performance factors and advantages",
+      "fields": {
+        "home_advantage": {
+          "_schema_path": "field_registry.phase_2_venue.fields.home_advantage",
+          "scale_type": "extended_multiplier",
+          "range": [0.8, 1.5],
+          "default": 1.2,
+          "data_type": "float",
+          "description": "General home performance advantage multiplier"
+        },
+        "stadium_specific": {
+          "_schema_path": "field_registry.phase_2_venue.fields.stadium_specific",
+          "scale_type": "extended_multiplier",
+          "range": [0.8, 1.3],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Team's specific stadium advantage factor"
+        },
+        "away_resilience": {
+          "_schema_path": "field_registry.phase_2_venue.fields.away_resilience",
+          "scale_type": "extended_multiplier",
+          "range": [0.7, 1.3],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Away performance multiplier vs league average"
+        },
+        "travel_sensitivity": {
+          "_schema_path": "field_registry.phase_2_venue.fields.travel_sensitivity",
+          "scale_type": "multiplier",
+          "range": [0.8, 1.2],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Performance impact from travel distance"
+        },
+        "surface_preference": {
+          "_schema_path": "field_registry.phase_2_venue.fields.surface_preference",
+          "scale_type": "enum",
+          "values": ["grass", "artificial", "neutral"],
+          "data_type": "string",
+          "description": "Preferred playing surface type"
+        },
+        "surface_advantage": {
+          "_schema_path": "field_registry.phase_2_venue.fields.surface_advantage",
+          "scale_type": "multiplier",
+          "range": [0.9, 1.1],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Performance advantage on preferred surface"
+        },
+        "venue_sample_size": {
+          "_schema_path": "field_registry.phase_2_venue.fields.venue_sample_size",
+          "scale_type": "count_unbounded",
+          "range": [0, null],
+          "typical_max": 100,
+          "data_type": "integer",
+          "description": "Number of matches analyzed for venue parameters"
+        },
+        "confidence_level": {
+          "_schema_path": "field_registry.phase_2_venue.fields.confidence_level",
+          "scale_type": "enum",
+          "values": ["high", "medium", "low", "none"],
+          "data_type": "string",
+          "description": "Confidence level in venue analysis"
+        }
+      }
+    },
+
+    "phase_3_temporal": {
+      "description": "Time-aware adjustments for current form, momentum, and situational factors",
+      "fields": {
+        "recent_form": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.recent_form",
+          "scale_type": "multiplier",
+          "range": [0.8, 1.2],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Form-based adjustment (derived from 0-10 form score)"
+        },
+        "seasonal_adjustment": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.seasonal_adjustment",
+          "scale_type": "multiplier",
+          "range": [0.9, 1.1],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Adjustment for current season period/phase"
+        },
+        "injury_impact": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.injury_impact",
+          "scale_type": "negative_impact",
+          "range": [-0.3, 0.0],
+          "default": 0.0,
+          "data_type": "float",
+          "description": "Negative impact from injuries and suspensions"
+        },
+        "momentum_factor": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.momentum_factor",
+          "scale_type": "multiplier",
+          "range": [0.9, 1.1],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Win/loss streak momentum impact"
+        },
+        "fixture_congestion": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.fixture_congestion",
+          "scale_type": "multiplier",
+          "range": [0.95, 1.0],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Performance impact from fixture congestion/fatigue"
+        },
+        "form_confidence": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.form_confidence",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Confidence in form assessment"
+        },
+        "form_trend": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.form_trend",
+          "scale_type": "enum",
+          "values": ["improving", "declining", "stable"],
+          "data_type": "string",
+          "description": "Current form trajectory"
+        },
+        "seasonal_trend": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.seasonal_trend",
+          "scale_type": "string",
+          "data_type": "string",
+          "description": "Descriptive seasonal performance trend"
+        },
+        "key_players_out": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.key_players_out",
+          "scale_type": "array",
+          "data_type": "array",
+          "description": "List of injured/suspended key players"
+        },
+        "matches_analyzed": {
+          "_schema_path": "field_registry.phase_3_temporal.fields.matches_analyzed",
+          "scale_type": "count_bounded",
+          "range": [0, 20],
+          "typical_max": 10,
+          "data_type": "integer",
+          "description": "Number of recent matches analyzed for form"
+        }
+      }
+    },
+
+    "phase_4_tactical": {
+      "description": "Tactical style, formation analysis, and manager profile",
+      "fields": {
+        "preferred_formation": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.preferred_formation",
+          "scale_type": "string",
+          "data_type": "string",
+          "pattern": "\\d-\\d-\\d",
+          "description": "Most frequently used formation (e.g., '4-3-3')"
+        },
+        "formation_confidence": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.formation_confidence",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Consistency in formation usage"
+        },
+        "tactical_consistency": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.tactical_consistency",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Overall tactical consistency across matches"
+        },
+        "possession_style": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.possession_style",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Ball possession preference (0=direct play, 10=possession-based)"
+        },
+        "attacking_intensity": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.attacking_intensity",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Attacking aggression and forward commitment level"
+        },
+        "defensive_solidity": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.defensive_solidity",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Defensive organization and structural strength"
+        },
+        "counter_efficiency": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.counter_efficiency",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Counter-attacking effectiveness"
+        },
+        "pressing_intensity": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.pressing_intensity",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "High press and pressure intensity"
+        },
+        "build_up_speed": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.build_up_speed",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Build-up play tempo (0=slow/patient, 10=fast/direct)"
+        },
+        "width_usage": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.width_usage",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Usage of wide areas and flanks"
+        },
+        "aerial_preference": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.aerial_preference",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Preference for aerial play and long balls"
+        },
+        "formation_effectiveness": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.formation_effectiveness",
+          "scale_type": "tactical_scale",
+          "range": [0.0, 10.0],
+          "default": 5.0,
+          "data_type": "float",
+          "description": "Overall formation effectiveness score"
+        },
+        "formation_attacking_bonus": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.formation_attacking_bonus",
+          "scale_type": "multiplier",
+          "range": [0.8, 1.2],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Attacking performance bonus from formation"
+        },
+        "formation_defensive_bonus": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.formation_defensive_bonus",
+          "scale_type": "multiplier",
+          "range": [0.8, 1.2],
+          "default": 1.0,
+          "data_type": "float",
+          "description": "Defensive performance bonus from formation"
+        },
+        "manager_name": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.manager_name",
+          "scale_type": "string",
+          "data_type": "string",
+          "description": "Current manager name"
+        },
+        "manager_experience": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.manager_experience",
+          "scale_type": "count_bounded",
+          "range": [0, 50],
+          "typical_max": 40,
+          "data_type": "integer",
+          "unit": "years",
+          "description": "Manager's years of professional experience"
+        },
+        "manager_tactical_flexibility": {
+          "_schema_path": "field_registry.phase_4_tactical.fields.manager_tactical_flexibility",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Manager's tactical adaptability score"
+        }
+      }
+    },
+
+    "phase_5_classification": {
+      "description": "Team archetype classification and comprehensive performance profiling",
+      "fields": {
+        "archetype": {
+          "_schema_path": "field_registry.phase_5_classification.fields.archetype",
+          "scale_type": "enum",
+          "values": [
+            "ELITE_CONSISTENT",
+            "TACTICAL_SPECIALISTS",
+            "MOMENTUM_DEPENDENT",
+            "HOME_FORTRESS",
+            "BIG_GAME_SPECIALISTS",
+            "UNPREDICTABLE_CHAOS"
+          ],
+          "data_type": "string",
+          "description": "Primary team archetype classification"
+        },
+        "archetype_confidence": {
+          "_schema_path": "field_registry.phase_5_classification.fields.archetype_confidence",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Confidence in archetype classification"
+        },
+        "archetype_stability": {
+          "_schema_path": "field_registry.phase_5_classification.fields.archetype_stability",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Stability of archetype classification over time"
+        },
+        "evolution_trend": {
+          "_schema_path": "field_registry.phase_5_classification.fields.evolution_trend",
+          "scale_type": "enum",
+          "values": ["stable", "improving", "declining", "transforming"],
+          "data_type": "string",
+          "description": "Team's evolution trajectory"
+        },
+        "secondary_traits": {
+          "_schema_path": "field_registry.phase_5_classification.fields.secondary_traits",
+          "scale_type": "array",
+          "data_type": "array",
+          "description": "Additional archetype characteristics"
+        }
+      },
+
+      "performance_profile": {
+        "description": "Nested object containing four sub-profiles, all using 0.0-1.0 probability scale",
+
+        "attacking_profile": {
+          "goal_scoring_consistency": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.attacking_profile.goal_scoring_consistency",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Consistency in scoring goals"
+          },
+          "big_game_performance": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.attacking_profile.big_game_performance",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Performance level in important matches"
+          },
+          "creativity_index": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.attacking_profile.creativity_index",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Creative attacking play quality"
+          },
+          "clinical_finishing": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.attacking_profile.clinical_finishing",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Conversion efficiency and finishing quality"
+          }
+        },
+
+        "defensive_profile": {
+          "defensive_stability": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.defensive_profile.defensive_stability",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Defensive consistency and reliability"
+          },
+          "pressure_resistance": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.defensive_profile.pressure_resistance",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Performance under defensive pressure"
+          },
+          "set_piece_defending": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.defensive_profile.set_piece_defending",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Set piece defensive strength"
+          },
+          "recovery_ability": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.defensive_profile.recovery_ability",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Ability to recover from setbacks/conceding"
+          }
+        },
+
+        "mentality_profile": {
+          "home_fortress_mentality": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.mentality_profile.home_fortress_mentality",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Home dominance mentality score"
+          },
+          "away_resilience": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.mentality_profile.away_resilience",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Away performance resilience score (NOTE: Different from phase_2_venue.away_resilience multiplier)"
+          },
+          "comeback_ability": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.mentality_profile.comeback_ability",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Ability to come from behind"
+          },
+          "big_match_temperament": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.mentality_profile.big_match_temperament",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Mental strength in important matches"
+          }
+        },
+
+        "tactical_profile": {
+          "tactical_flexibility": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.tactical_profile.tactical_flexibility",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Tactical adaptability across matches"
+          },
+          "adaptation_speed": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.tactical_profile.adaptation_speed",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Speed of in-game tactical adaptation"
+          },
+          "system_dependence": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.tactical_profile.system_dependence",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Reliance on specific tactical system"
+          },
+          "player_versatility": {
+            "_schema_path": "field_registry.phase_5_classification.performance_profile.tactical_profile.player_versatility",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Player positional versatility score"
+          }
+        }
+      },
+
+      "prediction_weights": {
+        "description": "Archetype-specific weights for prediction components",
+        "opponent_weight": {
+          "_schema_path": "field_registry.phase_5_classification.prediction_weights.opponent_weight",
+          "scale_type": "prediction_weight",
+          "range": [0.5, 1.5],
+          "data_type": "float",
+          "description": "Weight for opponent analysis component"
+        },
+        "venue_weight": {
+          "_schema_path": "field_registry.phase_5_classification.prediction_weights.venue_weight",
+          "scale_type": "prediction_weight",
+          "range": [0.5, 1.5],
+          "data_type": "float",
+          "description": "Weight for venue factors component"
+        },
+        "temporal_weight": {
+          "_schema_path": "field_registry.phase_5_classification.prediction_weights.temporal_weight",
+          "scale_type": "prediction_weight",
+          "range": [0.5, 1.5],
+          "data_type": "float",
+          "description": "Weight for form/momentum component"
+        },
+        "tactical_weight": {
+          "_schema_path": "field_registry.phase_5_classification.prediction_weights.tactical_weight",
+          "scale_type": "prediction_weight",
+          "range": [0.5, 1.5],
+          "data_type": "float",
+          "description": "Weight for tactical factors component"
+        },
+        "base_confidence": {
+          "_schema_path": "field_registry.phase_5_classification.prediction_weights.base_confidence",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Base prediction confidence for this archetype"
+        }
+      },
+
+      "consistency_metrics": {
+        "description": "Performance consistency and variance measures",
+        "overall_variance": {
+          "_schema_path": "field_registry.phase_5_classification.consistency_metrics.overall_variance",
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "data_type": "float",
+          "description": "Overall performance variance (0=consistent, 1=highly variable)"
+        },
+
+        "context_consistency": {
+          "vs_strong_opponents": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.context_consistency.vs_strong_opponents",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Consistency against strong teams"
+          },
+          "vs_weak_opponents": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.context_consistency.vs_weak_opponents",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Consistency against weak teams"
+          },
+          "home_consistency": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.context_consistency.home_consistency",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Home performance consistency"
+          },
+          "away_consistency": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.context_consistency.away_consistency",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Away performance consistency"
+          }
+        },
+
+        "streak_analysis": {
+          "max_winning_streak": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.streak_analysis.max_winning_streak",
+            "scale_type": "count_bounded",
+            "range": [0, 30],
+            "typical_max": 15,
+            "data_type": "integer",
+            "description": "Longest winning streak in analyzed period"
+          },
+          "max_losing_streak": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.streak_analysis.max_losing_streak",
+            "scale_type": "count_bounded",
+            "range": [0, 30],
+            "typical_max": 15,
+            "data_type": "integer",
+            "description": "Longest losing streak in analyzed period"
+          },
+          "streak_frequency": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.streak_analysis.streak_frequency",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "How frequently team goes on streaks"
+          },
+          "streak_recovery": {
+            "_schema_path": "field_registry.phase_5_classification.consistency_metrics.streak_analysis.streak_recovery",
+            "scale_type": "probability",
+            "range": [0.0, 1.0],
+            "data_type": "float",
+            "description": "Speed of recovery from bad streaks"
+          }
+        }
+      },
+
+      "archetype_adjustments": {
+        "description": "Archetype-specific parameter adjustments",
+        "confidence_multiplier": {
+          "_schema_path": "field_registry.phase_5_classification.archetype_adjustments.confidence_multiplier",
+          "scale_type": "multiplier",
+          "range": [0.7, 1.1],
+          "data_type": "float",
+          "description": "Overall prediction confidence adjustment"
+        },
+        "variance_adjustment": {
+          "_schema_path": "field_registry.phase_5_classification.archetype_adjustments.variance_adjustment",
+          "scale_type": "multiplier",
+          "range": [0.9, 1.5],
+          "data_type": "float",
+          "description": "Variance/unpredictability adjustment"
+        },
+        "context_sensitivity": {
+          "_schema_path": "field_registry.phase_5_classification.archetype_adjustments.context_sensitivity",
+          "scale_type": "multiplier",
+          "range": [0.8, 1.4],
+          "data_type": "float",
+          "description": "Sensitivity to situational factors"
+        }
+      }
+    }
+  },
+
+  "archetype_specific_fields": {
+    "description": "Additional fields that appear only for specific archetypes",
+    "ELITE_CONSISTENT": {
+      "quality_boost": {
+        "_schema_path": "archetype_specific_fields.ELITE_CONSISTENT.quality_boost",
+        "range": [0.95, 1.05],
+        "data_type": "float",
+        "description": "Small consistent quality boost for elite teams"
+      }
+    },
+    "TACTICAL_SPECIALISTS": {
+      "tactical_weight_boost": {
+        "_schema_path": "archetype_specific_fields.TACTICAL_SPECIALISTS.tactical_weight_boost",
+        "range": [1.0, 1.3],
+        "data_type": "float",
+        "description": "Increased tactical factor importance"
+      }
+    },
+    "MOMENTUM_DEPENDENT": {
+      "temporal_weight_boost": {
+        "_schema_path": "archetype_specific_fields.MOMENTUM_DEPENDENT.temporal_weight_boost",
+        "range": [1.0, 1.4],
+        "data_type": "float",
+        "description": "Increased form/momentum importance"
+      }
+    },
+    "HOME_FORTRESS": {
+      "venue_weight_boost": {
+        "_schema_path": "archetype_specific_fields.HOME_FORTRESS.venue_weight_boost",
+        "range": [1.0, 1.5],
+        "data_type": "float",
+        "description": "Increased venue factor importance"
+      }
+    }
+  },
+
+  "usage_examples": {
+    "example_1": {
+      "description": "Interpreting a venue multiplier",
+      "field_path": "phase_2_venue.away_resilience",
+      "value": 0.909,
+      "lookup_steps": [
+        "1. Find field in field_registry: phase_2_venue.fields.away_resilience",
+        "2. Get scale_type: extended_multiplier",
+        "3. Look up scale_definitions.extended_multiplier",
+        "4. Range: [0.7, 1.3], neutral: 1.0"
+      ],
+      "interpretation": "Value 0.909 means team performs at 90.9% of league average when playing away (below average performance)",
+      "usage": "Multiply away predictions by 0.909 to adjust for this team's away performance"
+    },
+
+    "example_2": {
+      "description": "Interpreting a tactical style metric",
+      "field_path": "phase_4_tactical.defensive_solidity",
+      "value": 7.2,
+      "lookup_steps": [
+        "1. Find field in field_registry: phase_4_tactical.fields.defensive_solidity",
+        "2. Get scale_type: tactical_scale",
+        "3. Look up scale_definitions.tactical_scale",
+        "4. Range: [0-10], neutral: 5.0"
+      ],
+      "interpretation": "Value 7.2 indicates above-average defensive organization (falls in 6-7 'above average' range)",
+      "usage": "Team likely concedes fewer goals due to strong defensive structure; adjust defensive predictions accordingly"
+    },
+
+    "example_3": {
+      "description": "Interpreting a confidence score",
+      "field_path": "phase_5_classification.archetype_confidence",
+      "value": 0.85,
+      "lookup_steps": [
+        "1. Find field in field_registry: phase_5_classification.fields.archetype_confidence",
+        "2. Get scale_type: probability",
+        "3. Look up scale_definitions.probability",
+        "4. Range: [0.0, 1.0]"
+      ],
+      "interpretation": "85% confidence in archetype classification (high confidence - above 0.7 threshold)",
+      "usage": "Trust archetype-specific adjustments and prediction weights due to high classification confidence"
+    },
+
+    "example_4": {
+      "description": "Understanding two fields with same name but different meanings",
+      "fields": [
+        {
+          "field_path": "phase_2_venue.away_resilience",
+          "schema_path": "field_registry.phase_2_venue.fields.away_resilience",
+          "value": 0.909,
+          "scale_type": "extended_multiplier",
+          "range": [0.7, 1.3],
+          "meaning": "Away performance multiplier - multiply predictions by this value"
+        },
+        {
+          "field_path": "phase_5_classification.performance_profile.mentality_profile.away_resilience",
+          "schema_path": "field_registry.phase_5_classification.performance_profile.mentality_profile.away_resilience",
+          "value": 0.65,
+          "scale_type": "probability",
+          "range": [0.0, 1.0],
+          "meaning": "Away resilience score - qualitative assessment (0=weak, 1=excellent)"
+        }
+      ],
+      "note": "Same field name, different contexts and scales - always use full path or _schema_path for disambiguation"
+    }
+  },
+
+  "calculation_notes": {
+    "robust_alpha": "Alpha bounded by league_alpha * [0.5, 2.0], confidence-weighted toward league average, final clamp [0.01, 2.0]",
+    "multipliers": "All multipliers confidence-weighted toward neutral value 1.0, with hard clamps to prevent extreme values",
+    "form_normalization": "0-10 form scores normalized via formula: 0.8 + (form_score/10 * 0.4) yielding [0.8, 1.2] range",
+    "segmented_fallback": "When segment sample size insufficient, falls back to overall parameters with appropriate flagging"
+  },
+
+  "metadata": {
+    "generated_date": "2025-11-06",
+    "source_files": [
+      "src/parameters/team_calculator.py",
+      "src/parameters/multiplier_calculator.py",
+      "src/handlers/team_parameter_handler.py",
+      "src/services/parameter_extraction_service.py"
+    ],
+    "notes": [
+      "All ranges represent hard limits enforced by clamping in calculation code",
+      "Default values are used when insufficient data available",
+      "Typical_max values indicate realistic upper bounds even when no hard limit exists",
+      "Phase 1 (segmented_params) reuses Phase 0 structure for each opponent tier",
+      "Each parameter definition includes _schema_path for easy lookup and cross-referencing"
+    ]
+  }
+}
