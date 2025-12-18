@@ -45,50 +45,97 @@ from ..reporting.executive_reports import generate_predictive_insights_report
 
 def get_segmented_params(team_params, opponent_team_id, league_id, season):
     """
-    Get segmented parameters based on opponent strength tier (Phase 1 enhancement).
-    
-    This function determines the opponent's strength tier and selects the appropriate
-    segmented parameters to improve prediction accuracy.
-    
+    Get segmented parameters based on opponent characteristics (Phase 1 + 1.5 enhancement).
+
+    This function uses intelligent segment selection with three-tier fallback:
+    1. Archetype segment (opponent's playing style) - if sufficient data
+    2. Position segment (opponent's table tier) - if sufficient data
+    3. Overall team parameters - fallback
+
     Args:
-        team_params: Team parameters dictionary (with segmented_params if available)
+        team_params: Team parameters dictionary (with segmented_params and
+                    archetype_segmented_params if available)
         opponent_team_id: ID of the opposing team
         league_id: League ID
         season: Season for opponent classification
-        
+
     Returns:
-        Dict: Appropriate parameter set based on opponent strength
+        Dict: Appropriate parameter set based on opponent characteristics
     """
-    # Check if segmented parameters are available (Phase 1 feature)
-    if not team_params.get('segmented_params') or not season:
+    # Check if any segmentation is available (Phase 1 or 1.5 features)
+    has_position_segments = bool(team_params.get('segmented_params'))
+    has_archetype_segments = bool(team_params.get('archetype_segmented_params'))
+
+    if not season or (not has_position_segments and not has_archetype_segments):
         # Fallback to overall parameters for backward compatibility
         return team_params
-    
+
     try:
-        # For prediction purposes, we need to classify the opponent team
-        # Since we don't have specific match context here, we'll use a simplified approach
-        # by getting the opponent's overall tier classification
+        # Use the intelligent segment selector with fallback logic
+        from ..features.segment_selector import select_segmented_params
+
+        selected_params, metadata = select_segmented_params(
+            team_params, opponent_team_id, league_id, int(season)
+        )
+
+        # Add selection metadata to params for debugging/analysis
+        selected_params['_segment_selection'] = metadata
+
+        print(f"Segment selection: {metadata['selection_source']} "
+              f"({metadata['segment_key']}, n={metadata['sample_size']}, "
+              f"confidence={metadata['confidence']})")
+
+        if metadata.get('fallback_chain'):
+            print(f"  Fallback chain: {' -> '.join(metadata['fallback_chain'])}")
+
+        return selected_params
+
+    except ImportError:
+        # Fallback to legacy position-only selection if segment_selector not available
+        print("Warning: segment_selector not available, falling back to position-only selection")
+        return _get_position_segmented_params_legacy(team_params, opponent_team_id, league_id, season)
+
+    except Exception as e:
+        print(f"Warning: Failed to select segmented parameters: {e}, using overall parameters")
+        return team_params
+
+
+def _get_position_segmented_params_legacy(team_params, opponent_team_id, league_id, season):
+    """
+    Legacy position-only segment selection (Phase 1 behavior).
+
+    Used as fallback if the new segment_selector module is not available.
+
+    Args:
+        team_params: Team parameters dictionary
+        opponent_team_id: ID of the opposing team
+        league_id: League ID
+        season: Season for opponent classification
+
+    Returns:
+        Dict: Appropriate parameter set based on opponent tier
+    """
+    try:
         from ..features.opponent_classifier import OpponentClassifier
         classifier = OpponentClassifier()
         opponent_tier = classifier.get_team_tier(opponent_team_id, league_id, season)
-        
+
         # Select appropriate segmented parameters
-        segmented_params = team_params['segmented_params']
+        segmented_params = team_params.get('segmented_params', {})
         segment_key = f'vs_{opponent_tier}'
-        
+
         if segment_key in segmented_params:
             selected_params = segmented_params[segment_key]
             # Merge base parameters with tier-specific parameters
-            # This ensures required Phase 0 parameters (k_goals, k_score, etc.) are always present
             merged_params = {**team_params, **selected_params}
-            print(f"Using {segment_key} parameters for opponent {opponent_team_id} (tier: {opponent_tier})")
+            print(f"[Legacy] Using {segment_key} parameters for opponent {opponent_team_id}")
             return merged_params
         else:
-            print(f"Segmented parameters not available for {segment_key}, using overall parameters")
+            print(f"[Legacy] Segmented parameters not available for {segment_key}")
             return team_params
-            
+
     except Exception as e:
-        print(f"Warning: Failed to select segmented parameters: {e}, using overall parameters")
+        print(f"[Legacy] Failed to select segmented parameters: {e}")
         return team_params
 
 

@@ -40,6 +40,8 @@ from ..data.tactical_data_collector import TacticalDataCollector
 from ..features.team_classifier import classify_team_archetype, get_team_performance_profile, get_archetype_prediction_weights
 from ..features.strategy_router import calculate_adaptive_weights
 from ..features.archetype_analyzer import analyze_performance_consistency
+# Phase 1.5: Opponent archetype segmentation imports
+from ..features.opponent_archetype_classifier import get_opponent_archetype_from_match, OpponentArchetypeClassifier
 
 
 def calculate_robust_alpha(team_variance, team_mean, league_alpha, sample_size, min_samples=10):
@@ -341,7 +343,19 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
             'vs_middle': overall_params.copy(),
             'vs_bottom': overall_params.copy()
         }
-    
+
+    # Phase 1.5 Enhancement: Calculate segmented parameters by opponent archetype
+    archetype_segmented_params = {}
+    if season and not df.empty and len(df) >= MINIMUM_GAMES_THRESHOLD:
+        try:
+            archetype_segmented_params = calculate_segmented_params_by_opponent_archetype(
+                df, team_id, league_id, season, league_params
+            )
+        except Exception as e:
+            print(f"Warning: Failed to calculate archetype segmented parameters for team {team_id}: {e}")
+            print("Archetype segmentation will not be available for this team")
+            archetype_segmented_params = {}
+
     # Phase 2 Enhancement: Calculate venue-specific parameters
     venue_params = {}
     if season and not df.empty and len(df) >= MINIMUM_GAMES_THRESHOLD:
@@ -400,25 +414,30 @@ def fit_team_params(df, team_id, league_id, season=None, prediction_date=None):
     return {
         # Maintain backward compatibility by keeping overall parameters at root level
         **overall_params,
-        
-        # Phase 1 enhancement: segmented parameters
+
+        # Phase 1 enhancement: segmented parameters (by opponent table position)
         'segmented_params': segmented_params,
-        
+
+        # Phase 1.5 enhancement: archetype segmented parameters (by opponent playing style)
+        'archetype_segmented_params': archetype_segmented_params,
+
         # Phase 2 enhancement: venue parameters
         'venue_params': venue_params,
-        
+
         # Phase 3 enhancement: temporal parameters
         'temporal_params': temporal_params,
-        
+
         # Phase 4 enhancement: tactical parameters
         'tactical_params': tactical_params,
-        
+
         # Phase 5 enhancement: classification parameters
         'classification_params': classification_params,
-        
+
         # Metadata about enhancements
         'segmentation_enabled': bool(season and not df.empty),
         'segmentation_version': '1.0',
+        'archetype_segmentation_enabled': bool(archetype_segmented_params),
+        'archetype_segmentation_version': '1.5',
         'venue_analysis_enabled': bool(season and not df.empty),
         'venue_analysis_version': '2.0',
         'temporal_analysis_enabled': bool(season and not df.empty),
@@ -829,6 +848,124 @@ def get_fallback_segment_params(league_params, segment_name):
         'baseline_flag': True,
         'contamination_prevented': True
     }
+
+
+def calculate_segmented_params_by_opponent_archetype(df, team_id, league_id, season, league_params):
+    """
+    Calculate segmented team parameters by opponent archetype (playing style).
+
+    This is the Phase 1.5 enhancement that enables archetype-specific
+    parameter calculation for style-based predictions. Complements the
+    existing opponent strength (table position) segmentation.
+
+    Args:
+        df: DataFrame containing match data with team IDs
+        team_id: ID of the team to analyze
+        league_id: ID of the league
+        season: Season year for opponent classification
+        league_params: League parameters for fallback
+
+    Returns:
+        Dict with parameters for each opponent archetype:
+        - vs_ELITE_CONSISTENT
+        - vs_TACTICAL_SPECIALISTS
+        - vs_MOMENTUM_DEPENDENT
+        - vs_HOME_FORTRESS
+        - vs_BIG_GAME_SPECIALISTS
+        - vs_UNPREDICTABLE_CHAOS
+    """
+    MIN_ARCHETYPE_SEGMENT_MATCHES = 3  # Minimum matches required per archetype segment
+
+    # All archetypes we track
+    ARCHETYPES = OpponentArchetypeClassifier.ARCHETYPES
+
+    # Initialize match buckets for each archetype
+    archetype_matches = {f'vs_{arch}': [] for arch in ARCHETYPES}
+
+    print(f"Segmenting {len(df)} matches for team {team_id} by opponent archetype...")
+
+    for _, match in df.iterrows():
+        try:
+            # Determine season from match timestamp
+            match_date = pd.to_datetime(match['date'])
+            match_season = str(match_date.year)
+
+            # Classify opponent archetype
+            opponent_archetype = get_opponent_archetype_from_match(
+                match['home_team_id'],
+                match['away_team_id'],
+                league_id,
+                match_season,
+                team_id,
+                match_date
+            )
+
+            # Add to appropriate bucket
+            bucket_key = f'vs_{opponent_archetype}'
+            if bucket_key in archetype_matches:
+                archetype_matches[bucket_key].append(match)
+            else:
+                # Unknown archetype - add to UNPREDICTABLE_CHAOS as fallback
+                archetype_matches['vs_UNPREDICTABLE_CHAOS'].append(match)
+
+        except Exception as e:
+            print(f"Warning: Failed to classify opponent archetype for match {match.get('fixture_id', 'unknown')}: {e}")
+            # Default to UNPREDICTABLE_CHAOS on error
+            archetype_matches['vs_UNPREDICTABLE_CHAOS'].append(match)
+
+    # Print segmentation summary
+    print("Archetype segmentation results:")
+    for archetype_key, matches in archetype_matches.items():
+        print(f"  {archetype_key}: {len(matches)} matches")
+
+    # Calculate parameters for each archetype segment
+    archetype_params = {}
+
+    for archetype_key, matches in archetype_matches.items():
+        if len(matches) >= MIN_ARCHETYPE_SEGMENT_MATCHES:
+            try:
+                df_segment = pd.DataFrame(matches)
+                archetype_params[archetype_key] = calculate_segment_parameters(
+                    df_segment, team_id, league_params, segment_name=archetype_key
+                )
+                # Mark as archetype segment type
+                archetype_params[archetype_key]['segment_type'] = 'archetype'
+                archetype_params[archetype_key]['archetype_segment_valid'] = True
+            except Exception as e:
+                print(f"Error calculating {archetype_key} parameters: {e}")
+                archetype_params[archetype_key] = get_fallback_archetype_params(
+                    league_params, archetype_key
+                )
+        else:
+            print(f"Insufficient matches for {archetype_key} ({len(matches)} < {MIN_ARCHETYPE_SEGMENT_MATCHES}), using fallback")
+            archetype_params[archetype_key] = get_fallback_archetype_params(
+                league_params, archetype_key
+            )
+
+    return archetype_params
+
+
+def get_fallback_archetype_params(league_params, archetype_name):
+    """
+    Get fallback parameters for an archetype segment when insufficient data.
+
+    Uses the existing fallback logic but marks the segment type appropriately.
+
+    Args:
+        league_params: League parameters to use as fallback
+        archetype_name: Name of the archetype segment (e.g., 'vs_ELITE_CONSISTENT')
+
+    Returns:
+        Dict with fallback parameters marked as archetype fallback
+    """
+    # Use existing fallback logic
+    fallback = get_fallback_segment_params(league_params, archetype_name)
+
+    # Add archetype-specific markers
+    fallback['segment_type'] = 'archetype_fallback'
+    fallback['archetype_segment_valid'] = False
+
+    return fallback
 
 
 def filter_team_matches(df, team_id):
