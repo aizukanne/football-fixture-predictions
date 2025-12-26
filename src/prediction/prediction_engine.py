@@ -389,17 +389,17 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
     return base_lambda
 
 
-def calculate_coordinated_predictions(home_team_parameters, away_team_parameters, home_params, away_params, league_id, season=None, home_team_id=None, away_team_id=None, venue_id=None, prediction_date=None):
+def calculate_coordinated_predictions(home_team_parameters, away_team_parameters, home_params, away_params, league_id, season=None, home_team_id=None, away_team_id=None, venue_id=None, prediction_date=None, skip_home_adv=False):
     """
     Calculate coordinated predictions that preserve the ratio between home and away lambdas.
     This replaces individual lambda calculations with coordinated ones.
-    
+
     Enhanced with:
     - Phase 0 version tracking and hierarchical fallback integration
     - Phase 1 opponent strength stratification for improved accuracy
     - Phase 2 venue-specific advantages and travel distance impacts
     - Phase 3 temporal evolution for time-aware prediction intelligence
-    
+
     Args:
         home_team_parameters: Home team raw match data
         away_team_parameters: Away team raw match data
@@ -411,7 +411,9 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
         away_team_id: Away team ID (Phase 1)
         venue_id: Venue ID for stadium-specific analysis (Phase 2)
         prediction_date: Date for temporal analysis (Phase 3)
-        
+        skip_home_adv: If True, skip applying home_adv multiplier (use when match data
+                       is already venue-specific, i.e., home team uses only home matches)
+
     Returns:
         Tuple of prediction results for both teams and coordination info
     """
@@ -451,9 +453,14 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
         )
         
         # Apply basic home advantage using effective parameters
-        league_home_adv = effective_home_params.get('home_adv', 1.31)
-        home_lambda_base *= league_home_adv
-        away_lambda_base *= 1/league_home_adv
+        # Skip if using venue-specific match data (home advantage already in the data)
+        if skip_home_adv:
+            print("Skipping home_adv multiplier (venue-specific match data in use)")
+            league_home_adv = 1.0  # Neutral - no multiplier applied
+        else:
+            league_home_adv = effective_home_params.get('home_adv', 1.31)
+            home_lambda_base *= league_home_adv
+            away_lambda_base *= 1/league_home_adv
         
         # Phase 2 Enhancement: Apply venue-specific advantages and travel impacts
         venue_factors = {}

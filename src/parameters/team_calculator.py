@@ -2254,23 +2254,41 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             away_performance = smoothed_away_points / smoothed_away_max if smoothed_away_max > 0 else 0
             overall_performance = smoothed_total_points / smoothed_total_max if smoothed_total_max > 0 else 0
 
-            # Get goal stats
+            # Get goal stats - extract both venue-specific and total
             goals_for_home = data["response"]["goals"]["for"]["total"]["home"] or 0
             goals_for_away = data["response"]["goals"]["for"]["total"]["away"] or 0
-            goals_for = goals_for_home + goals_for_away
+            goals_for_total = goals_for_home + goals_for_away
 
             goals_against_home = data["response"]["goals"]["against"]["total"]["home"] or 0
             goals_against_away = data["response"]["goals"]["against"]["total"]["away"] or 0
-            goals_against = goals_against_home + goals_against_away
-            
-            # Get failed to score and clean sheet stats for legacy compatibility
+            goals_against_total = goals_against_home + goals_against_away
+
+            # Get failed to score and clean sheet stats - venue-specific
             failed_to_score_home = data["response"].get("failed_to_score", {}).get("home", 0) or 0
             failed_to_score_away = data["response"].get("failed_to_score", {}).get("away", 0) or 0
-            games_scored = total_games_played - (failed_to_score_home + failed_to_score_away)
-            
+            games_scored_total = total_games_played - (failed_to_score_home + failed_to_score_away)
+
             clean_sheet_home = data["response"].get("clean_sheet", {}).get("home", 0) or 0
             clean_sheet_away = data["response"].get("clean_sheet", {}).get("away", 0) or 0
-            cleansheets = clean_sheet_home + clean_sheet_away
+            cleansheets_total = clean_sheet_home + clean_sheet_away
+
+            # Get games played per venue
+            games_played_home = data["response"]["fixtures"]["played"].get("home", 0) or 0
+            games_played_away = data["response"]["fixtures"]["played"].get("away", 0) or 0
+
+            # Calculate venue-specific stats based on venue parameter
+            if venue == 'home':
+                venue_goals_scored = goals_for_home
+                venue_goals_conceded = goals_against_home
+                venue_games_scored = games_played_home - failed_to_score_home
+                venue_cleansheets = clean_sheet_home
+                venue_games_played = games_played_home
+            else:  # away
+                venue_goals_scored = goals_for_away
+                venue_goals_conceded = goals_against_away
+                venue_games_scored = games_played_away - failed_to_score_away
+                venue_cleansheets = clean_sheet_away
+                venue_games_played = games_played_away
 
             return {
                 'team_info': {
@@ -2291,11 +2309,18 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
                 },
                 'team_logo': team_logo,
                 'team_goal_stats': {
-                    'goals_scored': goals_for,              # Legacy key name
-                    'goals_conceded': goals_against,         # Legacy key name
-                    'games_scored': games_scored,            # Legacy field
-                    'cleansheets': cleansheets,              # Legacy field
-                    'total_games_played': total_games_played # Legacy field
+                    'goals_scored': venue_goals_scored,        # Venue-specific
+                    'goals_conceded': venue_goals_conceded,    # Venue-specific
+                    'games_scored': venue_games_scored,        # Venue-specific
+                    'cleansheets': venue_cleansheets,          # Venue-specific
+                    'total_games_played': venue_games_played   # Games at this venue
+                },
+                'team_goal_stats_total': {
+                    'goals_scored': goals_for_total,           # Combined home + away
+                    'goals_conceded': goals_against_total,     # Combined home + away
+                    'games_scored': games_scored_total,        # Combined
+                    'cleansheets': cleansheets_total,          # Combined
+                    'total_games_played': total_games_played   # All games
                 }
             }
         else:
@@ -2323,10 +2348,17 @@ def calculate_team_points(league_id, season, team_id, venue, match_details):
             },
             'team_logo': '',
             'team_goal_stats': {
-                'goals_scored': 0,           # Legacy key name
-                'goals_conceded': 0,          # Legacy key name
-                'games_scored': 0,            # Legacy field
-                'cleansheets': 0,             # Legacy field
-                'total_games_played': 0       # Legacy field
+                'goals_scored': 0,           # Venue-specific
+                'goals_conceded': 0,         # Venue-specific
+                'games_scored': 0,           # Venue-specific
+                'cleansheets': 0,            # Venue-specific
+                'total_games_played': 0      # Games at this venue
+            },
+            'team_goal_stats_total': {
+                'goals_scored': 0,           # Combined
+                'goals_conceded': 0,         # Combined
+                'games_scored': 0,           # Combined
+                'cleansheets': 0,            # Combined
+                'total_games_played': 0      # All games
             }
         }

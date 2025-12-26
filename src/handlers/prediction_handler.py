@@ -164,20 +164,52 @@ def process_fixtures(fixtures):
                 venue_info = None
                 venue_id_for_prediction = None
 
-            # Fetch team match data
-            home_team_parameters, home_match_details = fetch_team_match_data(
-                league_id, season, home_team_id, 
-                get_league_start_date(league_id)
+            # =================================================================
+            # FETCH MATCH DATA - TWO APPROACHES FOR 2x2 PREDICTION MATRIX
+            # =================================================================
+
+            # Approach 1: Total stats (all matches) - for primary & alternate predictions
+            # Uses home_adv multiplier to account for venue effect
+            home_team_parameters_total, home_match_details_total = fetch_team_match_data(
+                league_id, season, home_team_id,
+                get_league_start_date(league_id),
+                venue=None  # All matches
             )
-            away_team_parameters, away_match_details = fetch_team_match_data(
+            away_team_parameters_total, away_match_details_total = fetch_team_match_data(
                 league_id, season, away_team_id,
-                get_league_start_date(league_id)
+                get_league_start_date(league_id),
+                venue=None  # All matches
             )
 
-            if (home_team_parameters is None or home_match_details is None or 
-                away_team_parameters is None or away_match_details is None):
-                print(f"Skipping fixture {fixture_id}: Missing team match data")
+            # Approach 2: Venue-specific stats - for venue_predictions
+            # Home team uses only home matches, away team uses only away matches
+            # No home_adv multiplier needed (venue effect already in data)
+            home_team_parameters_venue, home_match_details_venue = fetch_team_match_data(
+                league_id, season, home_team_id,
+                get_league_start_date(league_id),
+                venue='home'
+            )
+            away_team_parameters_venue, away_match_details_venue = fetch_team_match_data(
+                league_id, season, away_team_id,
+                get_league_start_date(league_id),
+                venue='away'
+            )
+
+            # Check if we have data for at least one approach
+            has_total_data = (home_team_parameters_total is not None and
+                              away_team_parameters_total is not None)
+            has_venue_data = (home_team_parameters_venue is not None and
+                              away_team_parameters_venue is not None)
+
+            if not has_total_data and not has_venue_data:
+                print(f"Skipping fixture {fixture_id}: Missing team match data for both approaches")
                 continue
+
+            # Use total data as primary for backward compatibility
+            home_team_parameters = home_team_parameters_total or home_team_parameters_venue
+            away_team_parameters = away_team_parameters_total or away_team_parameters_venue
+            home_match_details = home_match_details_total or home_match_details_venue
+            away_match_details = away_match_details_total or away_match_details_venue
 
             # Calculate team points/stats
             try:
@@ -310,6 +342,83 @@ def process_fixtures(fixtures):
                 
                 team_coordination_info = {"coordination_applied": False, "fallback_reason": str(e)}
 
+            # =================================================================
+            # VENUE-SPECIFIC PREDICTIONS (skip_home_adv=True)
+            # Uses venue-filtered match data, no home_adv multiplier
+            # =================================================================
+            venue_prediction_summary = None
+            venue_prediction_summary_alt = None
+            venue_coordination_info = {"venue_predictions_available": False}
+
+            if has_venue_data:
+                # VENUE PREDICTIONS (League Parameters + Venue-Specific Data)
+                try:
+                    print("=== CALCULATING VENUE PREDICTIONS (LEAGUE PARAMS, NO HOME_ADV) ===")
+
+                    (home_score_venue, home_goals_venue, hg_likelihood_venue, home_probs_venue,
+                     away_score_venue, away_goals_venue, ag_likelihood_venue, away_probs_venue,
+                     venue_league_coordination_info) = calculate_coordinated_predictions(
+                        home_team_parameters_venue, away_team_parameters_venue,
+                        home_league_params, away_league_params, league_id,
+                        season=season,
+                        home_team_id=home_team_id,
+                        away_team_id=away_team_id,
+                        venue_id=venue_id_for_prediction,
+                        prediction_date=date_dt,
+                        skip_home_adv=True  # Venue effect already in data
+                    )
+
+                    venue_prediction_summary = create_prediction_summary_dict(home_probs_venue, away_probs_venue)
+
+                    home_team_stats['probability_to_score_venue'] = Decimal(str(home_score_venue))
+                    away_team_stats['probability_to_score_venue'] = Decimal(str(away_score_venue))
+                    home_team_stats['predicted_goals_venue'] = home_goals_venue
+                    away_team_stats['predicted_goals_venue'] = away_goals_venue
+                    home_team_stats['likelihood_venue'] = Decimal(str(hg_likelihood_venue))
+                    away_team_stats['likelihood_venue'] = Decimal(str(ag_likelihood_venue))
+
+                except Exception as e:
+                    print(f"Venue prediction (league params) failed for fixture {fixture_id}: {e}")
+                    venue_prediction_summary = None
+
+                # VENUE ALTERNATE PREDICTIONS (Team Parameters + Venue-Specific Data)
+                try:
+                    print("=== CALCULATING VENUE ALTERNATE PREDICTIONS (TEAM PARAMS, NO HOME_ADV) ===")
+
+                    (home_score_venue_alt, home_goals_venue_alt, hg_likelihood_venue_alt, home_probs_venue_alt,
+                     away_score_venue_alt, away_goals_venue_alt, ag_likelihood_venue_alt, away_probs_venue_alt,
+                     venue_team_coordination_info) = calculate_coordinated_predictions(
+                        home_team_parameters_venue, away_team_parameters_venue,
+                        home_params, away_params, league_id,
+                        season=season,
+                        home_team_id=home_team_id,
+                        away_team_id=away_team_id,
+                        venue_id=venue_id_for_prediction,
+                        prediction_date=date_dt,
+                        skip_home_adv=True  # Venue effect already in data
+                    )
+
+                    venue_prediction_summary_alt = create_prediction_summary_dict(home_probs_venue_alt, away_probs_venue_alt)
+
+                    home_team_stats['probability_to_score_venue_alt'] = Decimal(str(home_score_venue_alt))
+                    away_team_stats['probability_to_score_venue_alt'] = Decimal(str(away_score_venue_alt))
+                    home_team_stats['predicted_goals_venue_alt'] = home_goals_venue_alt
+                    away_team_stats['predicted_goals_venue_alt'] = away_goals_venue_alt
+                    home_team_stats['likelihood_venue_alt'] = Decimal(str(hg_likelihood_venue_alt))
+                    away_team_stats['likelihood_venue_alt'] = Decimal(str(ag_likelihood_venue_alt))
+
+                    venue_coordination_info = {
+                        "venue_predictions_available": True,
+                        "venue_league_coordination": convert_floats_to_decimal(venue_league_coordination_info) if venue_prediction_summary else None,
+                        "venue_team_coordination": convert_floats_to_decimal(venue_team_coordination_info)
+                    }
+
+                except Exception as e:
+                    print(f"Venue alternate prediction (team params) failed for fixture {fixture_id}: {e}")
+                    venue_prediction_summary_alt = None
+            else:
+                print(f"Venue-specific predictions not available for fixture {fixture_id}: insufficient venue-filtered data")
+
             # Add additional fixture data
             home_team_stats['record_id'] = f"{fixture['fixture_id']}_home_{home_team_id}"
             away_team_stats['record_id'] = f"{fixture['fixture_id']}_away_{away_team_id}"
@@ -339,6 +448,10 @@ def process_fixtures(fixtures):
 
             home_team_stats['team_goal_stats'] = home_team_data['team_goal_stats']
             away_team_stats['team_goal_stats'] = away_team_data['team_goal_stats']
+
+            # Also include total stats for backward compatibility
+            home_team_stats['team_goal_stats_total'] = home_team_data['team_goal_stats_total']
+            away_team_stats['team_goal_stats_total'] = away_team_data['team_goal_stats_total']
             
             # Get additional match data
             home_team_stats['past_fixtures'] = get_last_five_games(home_team_id, league_id, season)
@@ -361,9 +474,12 @@ def process_fixtures(fixtures):
                 "date": date,
                 "predictions": prediction_summary,
                 "alternate_predictions": prediction_summary_alt,
+                "venue_predictions": venue_prediction_summary,
+                "venue_alternate_predictions": venue_prediction_summary_alt,
                 "coordination_info": {
                     "league_coordination": convert_floats_to_decimal(league_coordination_info),
-                    "team_coordination": convert_floats_to_decimal(team_coordination_info)
+                    "team_coordination": convert_floats_to_decimal(team_coordination_info),
+                    "venue_coordination": venue_coordination_info
                 },
                 "prediction_metadata": {
                     "architecture_version": current_version,

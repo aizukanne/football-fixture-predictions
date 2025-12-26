@@ -536,37 +536,134 @@ class FormationAnalyzer:
             return []
     
     def _calculate_vs_formation_breakdown(self, matches: List[Dict]) -> Dict:
-        """Calculate performance breakdown vs different formations."""
-        vs_formation = defaultdict(lambda: {'wins': 0, 'draws': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0})
-        
+        """
+        Calculate performance breakdown vs different formations with venue awareness.
+
+        Uses Bayesian blending: higher sample sizes trust venue-specific stats more,
+        lower sample sizes lean on overall stats.
+
+        Returns:
+            Dict with overall, home, away, and blended stats per formation
+        """
+        # Track stats by formation AND venue
+        vs_formation_overall = defaultdict(lambda: {'wins': 0, 'draws': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0})
+        vs_formation_home = defaultdict(lambda: {'wins': 0, 'draws': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0})
+        vs_formation_away = defaultdict(lambda: {'wins': 0, 'draws': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0})
+
         for match in matches:
             opponent_formation = match.get('opponent_formation', '4-4-2')
             result = match.get('result', 'draw')
             goals_for = match.get('goals_for', 0)
             goals_against = match.get('goals_against', 0)
-            
-            vs_formation[opponent_formation]['goals_for'] += goals_for
-            vs_formation[opponent_formation]['goals_against'] += goals_against
-            
+            is_home = match.get('is_home', True)  # Default to home if not specified
+
+            # Update overall stats
+            vs_formation_overall[opponent_formation]['goals_for'] += goals_for
+            vs_formation_overall[opponent_formation]['goals_against'] += goals_against
+
+            # Update venue-specific stats
+            venue_dict = vs_formation_home if is_home else vs_formation_away
+            venue_dict[opponent_formation]['goals_for'] += goals_for
+            venue_dict[opponent_formation]['goals_against'] += goals_against
+
             if result == 'win':
-                vs_formation[opponent_formation]['wins'] += 1
+                vs_formation_overall[opponent_formation]['wins'] += 1
+                venue_dict[opponent_formation]['wins'] += 1
             elif result == 'draw':
-                vs_formation[opponent_formation]['draws'] += 1
+                vs_formation_overall[opponent_formation]['draws'] += 1
+                venue_dict[opponent_formation]['draws'] += 1
             else:
-                vs_formation[opponent_formation]['losses'] += 1
-        
-        # Convert to regular dict with win rates
+                vs_formation_overall[opponent_formation]['losses'] += 1
+                venue_dict[opponent_formation]['losses'] += 1
+
+        # Convert to regular dict with win rates and Bayesian blending
         breakdown = {}
-        for formation, stats in vs_formation.items():
-            total_games = stats['wins'] + stats['draws'] + stats['losses']
-            if total_games > 0:
+        BLEND_THRESHOLD = 10  # Sample size for full venue-specific trust
+
+        for formation in vs_formation_overall.keys():
+            overall_stats = vs_formation_overall[formation]
+            home_stats = vs_formation_home[formation]
+            away_stats = vs_formation_away[formation]
+
+            overall_games = overall_stats['wins'] + overall_stats['draws'] + overall_stats['losses']
+            home_games = home_stats['wins'] + home_stats['draws'] + home_stats['losses']
+            away_games = away_stats['wins'] + away_stats['draws'] + away_stats['losses']
+
+            if overall_games > 0:
+                # Calculate overall stats
+                overall_win_rate = overall_stats['wins'] / overall_games
+                overall_gpg = overall_stats['goals_for'] / overall_games
+                overall_gcpg = overall_stats['goals_against'] / overall_games
+
+                # Calculate home stats (or use overall as fallback)
+                if home_games > 0:
+                    home_win_rate = home_stats['wins'] / home_games
+                    home_gpg = home_stats['goals_for'] / home_games
+                    home_gcpg = home_stats['goals_against'] / home_games
+                else:
+                    home_win_rate = overall_win_rate
+                    home_gpg = overall_gpg
+                    home_gcpg = overall_gcpg
+
+                # Calculate away stats (or use overall as fallback)
+                if away_games > 0:
+                    away_win_rate = away_stats['wins'] / away_games
+                    away_gpg = away_stats['goals_for'] / away_games
+                    away_gcpg = away_stats['goals_against'] / away_games
+                else:
+                    away_win_rate = overall_win_rate
+                    away_gpg = overall_gpg
+                    away_gcpg = overall_gcpg
+
+                # Bayesian blending: weight = min(n_venue / threshold, 1.0)
+                home_weight = min(home_games / BLEND_THRESHOLD, 1.0)
+                away_weight = min(away_games / BLEND_THRESHOLD, 1.0)
+
+                # Blended home = weight * venue_specific + (1 - weight) * overall
+                blended_home_win_rate = home_weight * home_win_rate + (1 - home_weight) * overall_win_rate
+                blended_home_gpg = home_weight * home_gpg + (1 - home_weight) * overall_gpg
+                blended_home_gcpg = home_weight * home_gcpg + (1 - home_weight) * overall_gcpg
+
+                blended_away_win_rate = away_weight * away_win_rate + (1 - away_weight) * overall_win_rate
+                blended_away_gpg = away_weight * away_gpg + (1 - away_weight) * overall_gpg
+                blended_away_gcpg = away_weight * away_gcpg + (1 - away_weight) * overall_gcpg
+
                 breakdown[formation] = {
-                    'games': total_games,
-                    'win_rate': Decimal(str(stats['wins'] / total_games)),
-                    'goals_per_game': Decimal(str(stats['goals_for'] / total_games)),
-                    'goals_conceded_per_game': Decimal(str(stats['goals_against'] / total_games))
+                    # Overall stats (backward compatible)
+                    'games': overall_games,
+                    'win_rate': Decimal(str(round(overall_win_rate, 4))),
+                    'goals_per_game': Decimal(str(round(overall_gpg, 4))),
+                    'goals_conceded_per_game': Decimal(str(round(overall_gcpg, 4))),
+
+                    # Venue-specific raw stats
+                    'home': {
+                        'games': home_games,
+                        'win_rate': Decimal(str(round(home_win_rate, 4))) if home_games > 0 else None,
+                        'goals_per_game': Decimal(str(round(home_gpg, 4))) if home_games > 0 else None,
+                        'goals_conceded_per_game': Decimal(str(round(home_gcpg, 4))) if home_games > 0 else None,
+                        'confidence': Decimal(str(round(home_weight, 2)))
+                    },
+                    'away': {
+                        'games': away_games,
+                        'win_rate': Decimal(str(round(away_win_rate, 4))) if away_games > 0 else None,
+                        'goals_per_game': Decimal(str(round(away_gpg, 4))) if away_games > 0 else None,
+                        'goals_conceded_per_game': Decimal(str(round(away_gcpg, 4))) if away_games > 0 else None,
+                        'confidence': Decimal(str(round(away_weight, 2)))
+                    },
+
+                    # Bayesian blended stats (recommended for predictions)
+                    'blended_home': {
+                        'win_rate': Decimal(str(round(blended_home_win_rate, 4))),
+                        'goals_per_game': Decimal(str(round(blended_home_gpg, 4))),
+                        'goals_conceded_per_game': Decimal(str(round(blended_home_gcpg, 4)))
+                    },
+                    'blended_away': {
+                        'win_rate': Decimal(str(round(blended_away_win_rate, 4))),
+                        'goals_per_game': Decimal(str(round(blended_away_gpg, 4))),
+                        'goals_conceded_per_game': Decimal(str(round(blended_away_gcpg, 4)))
+                    }
                 }
-        
+
         return breakdown
     
     def _calculate_formation_effectiveness_rating(self, win_rate: Decimal, goals_per_game: Decimal,

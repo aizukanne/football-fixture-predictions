@@ -536,7 +536,7 @@ def get_injured_players(fixture_id, date, max_retries=DEFAULT_MAX_RETRIES):
     return data["response"]
 
 
-def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES):
+def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES, venue=None):
     """
     Fetch match data for a specific team in a league from a given date.
 
@@ -546,6 +546,8 @@ def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEF
         team_id: Team identifier
         from_date: Start date for fetching matches (format: YYYY-MM-DD)
         max_retries: Maximum retry attempts
+        venue: Optional venue filter - 'home' for home matches only,
+               'away' for away matches only, None for all matches (default)
 
     Returns:
         Tuple of (team_parameters, match_details) or (None, None) if failed
@@ -583,6 +585,14 @@ def fetch_team_match_data(league_id, season, team_id, from_date, max_retries=DEF
             home_team = match["teams"]["home"]["id"]
             away_team = match["teams"]["away"]["id"]
             is_home = team_id == home_team
+
+            # Filter by venue if specified
+            # When venue='home', only include matches where team played at home
+            # When venue='away', only include matches where team played away
+            if venue == 'home' and not is_home:
+                continue
+            if venue == 'away' and is_home:
+                continue
 
             if is_home:
                 goals_scored = match["goals"]["home"]
@@ -953,8 +963,8 @@ class APIClient:
     def get_injured_players(self, fixture_id, date, max_retries=DEFAULT_MAX_RETRIES):
         return get_injured_players(fixture_id, date, max_retries)
     
-    def fetch_team_match_data(self, league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES):
-        return fetch_team_match_data(league_id, season, team_id, from_date, max_retries)
+    def fetch_team_match_data(self, league_id, season, team_id, from_date, max_retries=DEFAULT_MAX_RETRIES, venue=None):
+        return fetch_team_match_data(league_id, season, team_id, from_date, max_retries, venue)
     
     def get_fixtures_goals(self, league_id, start_timestamp, end_timestamp, season, max_retries=DEFAULT_MAX_RETRIES):
         return get_fixtures_goals(league_id, start_timestamp, end_timestamp, season, max_retries)

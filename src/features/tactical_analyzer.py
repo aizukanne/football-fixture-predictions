@@ -574,8 +574,19 @@ class TacticalAnalyzer:
             traceback.print_exc()
             return []
     
-    def _get_team_tactical_stats(self, team_id: int, league_id: int, season: int) -> Dict:
-        """Get comprehensive tactical statistics for a team from API."""
+    def _get_team_tactical_stats(self, team_id: int, league_id: int, season: int, venue: str = None) -> Dict:
+        """
+        Get comprehensive tactical statistics for a team from API.
+
+        Args:
+            team_id: Team identifier
+            league_id: League identifier
+            season: Season year
+            venue: 'home', 'away', or None (all matches - default for backward compatibility)
+
+        Returns:
+            Dictionary with tactical statistics (venue-specific if venue is provided)
+        """
         try:
             from ..data.api_client import get_team_statistics, get_fixtures_goals
 
@@ -594,23 +605,42 @@ class TacticalAnalyzer:
             cards = response.get('cards', {})
             clean_sheet = response.get('clean_sheet', {})
 
-            # Calculate games played
-            total_games = fixtures.get('played', {}).get('total', 0)
+            # Get games played - venue-specific or total
+            games_played_home = fixtures.get('played', {}).get('home', 0) or 0
+            games_played_away = fixtures.get('played', {}).get('away', 0) or 0
+            total_games_all = fixtures.get('played', {}).get('total', 0) or 0
+
+            # Determine which games count based on venue parameter
+            if venue == 'home':
+                total_games = games_played_home
+            elif venue == 'away':
+                total_games = games_played_away
+            else:
+                total_games = total_games_all
+
             if total_games == 0:
-                logger.warning(f"Team {team_id} has no games played")
+                logger.warning(f"Team {team_id} has no games played (venue={venue})")
                 return {}
 
-            # Calculate clean sheets ratio
+            # Get venue-specific stats
             clean_sheets_home = clean_sheet.get('home', 0) or 0
             clean_sheets_away = clean_sheet.get('away', 0) or 0
-            clean_sheets_total = clean_sheets_home + clean_sheets_away
-            clean_sheets_ratio = clean_sheets_total / total_games if total_games > 0 else 0
-
-            # Calculate goals conceded per game
             goals_conceded_home = goals.get('against', {}).get('total', {}).get('home', 0) or 0
             goals_conceded_away = goals.get('against', {}).get('total', {}).get('away', 0) or 0
-            goals_conceded_total = goals_conceded_home + goals_conceded_away
-            goals_conceded_per_game = goals_conceded_total / total_games if total_games > 0 else 0
+
+            # Calculate clean sheets ratio - venue-specific or combined
+            if venue == 'home':
+                clean_sheets_count = clean_sheets_home
+                goals_conceded_count = goals_conceded_home
+            elif venue == 'away':
+                clean_sheets_count = clean_sheets_away
+                goals_conceded_count = goals_conceded_away
+            else:
+                clean_sheets_count = clean_sheets_home + clean_sheets_away
+                goals_conceded_count = goals_conceded_home + goals_conceded_away
+
+            clean_sheets_ratio = clean_sheets_count / total_games if total_games > 0 else 0
+            goals_conceded_per_game = goals_conceded_count / total_games if total_games > 0 else 0
 
             # Calculate cards per game
             yellow_total = 0
@@ -630,7 +660,7 @@ class TacticalAnalyzer:
 
             # Get match-level statistics (last 10 games for tactical analysis)
             try:
-                match_stats = self._aggregate_match_statistics(team_id, league_id, season, limit=10)
+                match_stats = self._aggregate_match_statistics(team_id, league_id, season, limit=10, venue=venue)
             except Exception as e:
                 logger.warning(f"Could not aggregate match statistics: {e}")
                 match_stats = {}
@@ -645,10 +675,27 @@ class TacticalAnalyzer:
                 end_ts = int(datetime.now().timestamp())
                 fixtures = get_fixtures_goals(league_id, start_ts, end_ts, season)
 
-                # Filter for this team and get last 10
-                team_fixtures = [f for f in fixtures if
-                                 f.get('teams', {}).get('home', {}).get('id') == team_id or
-                                 f.get('teams', {}).get('away', {}).get('id') == team_id][-10:]
+                # Filter for this team - apply venue filter if specified
+                team_fixtures = []
+                for f in fixtures:
+                    home_id = f.get('teams', {}).get('home', {}).get('id')
+                    away_id = f.get('teams', {}).get('away', {}).get('id')
+
+                    if venue == 'home':
+                        # Only include fixtures where this team played at home
+                        if home_id == team_id:
+                            team_fixtures.append(f)
+                    elif venue == 'away':
+                        # Only include fixtures where this team played away
+                        if away_id == team_id:
+                            team_fixtures.append(f)
+                    else:
+                        # Include all fixtures for this team
+                        if home_id == team_id or away_id == team_id:
+                            team_fixtures.append(f)
+
+                # Get last 10 (or fewer if venue-filtered)
+                team_fixtures = team_fixtures[-10:]
 
                 goal_patterns = self._analyze_goal_patterns(team_id, team_fixtures, limit=10)
             except Exception as e:
@@ -702,7 +749,9 @@ class TacticalAnalyzer:
                 # Metadata
                 'goal_analysis_source': 'fixture_events_api',
                 'goals_analyzed': goal_patterns.get('total_goals_analyzed', 0),
-                'fixtures_analyzed': goal_patterns.get('fixtures_analyzed', 0)
+                'fixtures_analyzed': goal_patterns.get('fixtures_analyzed', 0),
+                'venue_filter': venue,  # Track which venue filter was applied
+                'games_in_sample': total_games  # Number of games used for these stats
             }
 
         except Exception as e:
@@ -805,7 +854,7 @@ class TacticalAnalyzer:
                 'fixtures_analyzed': 0
             }
 
-    def _aggregate_match_statistics(self, team_id: int, league_id: int, season: int, limit: int = 10) -> Dict:
+    def _aggregate_match_statistics(self, team_id: int, league_id: int, season: int, limit: int = 10, venue: str = None) -> Dict:
         """
         Aggregate match-level statistics from recent games.
 
@@ -814,6 +863,7 @@ class TacticalAnalyzer:
             league_id: League identifier
             season: Season year
             limit: Number of recent matches to analyze
+            venue: 'home', 'away', or None (all matches)
 
         Returns:
             Dictionary with aggregated match statistics
@@ -831,15 +881,29 @@ class TacticalAnalyzer:
                 logger.warning(f"No fixtures data for league {league_id}")
                 return {}
 
-            # Filter for this team and get last N fixtures
-            team_fixtures = [f for f in all_fixtures if
-                           f.get('teams', {}).get('home', {}).get('id') == team_id or
-                           f.get('teams', {}).get('away', {}).get('id') == team_id]
+            # Filter for this team with venue consideration
+            team_fixtures = []
+            for f in all_fixtures:
+                home_id = f.get('teams', {}).get('home', {}).get('id')
+                away_id = f.get('teams', {}).get('away', {}).get('id')
+
+                if venue == 'home':
+                    # Only include fixtures where this team played at home
+                    if home_id == team_id:
+                        team_fixtures.append(f)
+                elif venue == 'away':
+                    # Only include fixtures where this team played away
+                    if away_id == team_id:
+                        team_fixtures.append(f)
+                else:
+                    # Include all fixtures for this team
+                    if home_id == team_id or away_id == team_id:
+                        team_fixtures.append(f)
 
             fixtures = team_fixtures[-limit:] if len(team_fixtures) > limit else team_fixtures
 
             if not fixtures:
-                logger.warning(f"No fixtures data for team {team_id}")
+                logger.warning(f"No fixtures data for team {team_id} (venue={venue})")
                 return {}
 
             # Initialize accumulators
