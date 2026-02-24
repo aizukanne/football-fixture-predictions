@@ -10,6 +10,24 @@ from decimal import Decimal
 
 from ..data.database_client import update_fixture_best_bet
 
+# ─────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────
+THRESHOLD = 1.10            # Minimum odds for any recommendation
+LIMIT = 4.5                 # Maximum odds for any recommendation
+HIGH_PROB_THRESHOLD = 75
+VERY_HIGH_PROB_THRESHOLD = 82
+SIGNIFICANT_DIFF = 40       # Minimum probability gap (home vs away) for outright winner
+
+# Performance differential thresholds — base and streak-adjusted
+PERF_DIFF_BASE = 0.40
+PERF_DIFF_ELEVATED_3 = 0.48    # Required when winner on 3-game winless streak
+PERF_DIFF_ELEVATED_4 = 0.55    # Required when winner on 4-game winless streak
+WINLESS_STREAK_EXCLUDE = 5     # Hard-exclude DC if streak reaches this
+
+# Projected margin gate: minimum worst-case goal margin required
+MIN_PROJECTED_MARGIN = 1
+
 
 def lambda_handler(event, context):
     """
@@ -191,53 +209,39 @@ def get_predictions_based_odds(fixture_data):
 def get_recommendations_from_predictions(fixture_data):
     """
     Generate betting recommendations based on the predictions in the fixture data.
-    Prioritizes match winner, then double chance, then over 1.5 goals.
+    Priority: Match Winner → Double Chance → Over 1.5 Goals.
 
-    Parameters:
-    - fixture_data (dict): A dictionary containing fixture data including predictions
-
-    Returns:
-    - list: List of recommendations with fixture ID, recommendation type, value, and odds.
+    Gap fixes applied:
+      Gap 1: check_qualified_win_consistency — venue dominance (GD≥2) from past_fixtures
+      Gap 2: get_adjusted_perf_threshold — dynamic threshold + hard exclude at streak ≥ 5
+      Gap 3: is_table_proximity_risk — applied globally before all priorities
+      Gap 4: check_projected_margin — ±1 band on top_scores applied to Winner AND DC
     """
-    # Configuration thresholds
-    THRESHOLD = 1.10
-    LIMIT = 4.5
-    HIGH_PROB_THRESHOLD = 75
-    VERY_HIGH_PROB_THRESHOLD = 82
-    SIGNIFICANT_DIFF = 40
-
     recommendations = []
     fixture_id = fixture_data["fixture_id"]
     predictions = fixture_data.get("predictions", {})
 
-    # If predictions data is missing, return empty
     if not predictions:
         return recommendations
 
-    # Extract odds data
     odds = get_predictions_based_odds(fixture_data)
 
-    # Extract match outcome probabilities
+    # ── Probabilities ──────────────────────────────────────────────────────────
     match_outcome = predictions.get("match_outcome", {})
     home_win_prob = match_outcome.get("home_win", 0)
     draw_prob = match_outcome.get("draw", 0)
     away_win_prob = match_outcome.get("away_win", 0)
 
-    # Extract goals data
     goals_data = predictions.get("goals", {})
     print(f'Goals Data: {json.dumps(goals_data, default=decimal_default)}')
     over_goals = goals_data.get("over", {})
     btts = goals_data.get("btts", {})
     btts_yes_prob = btts.get("yes", 0)
 
-    # Extract top scores data
     top_scores = predictions.get("top_scores", [])
     most_likely_score = predictions.get("most_likely_score", {}).get("score", "0-0")
-
-    # Analyze the predicted scores
     home_wins, draws, away_wins = analyze_score_predictions(top_scores, most_likely_score)
 
-    # Extract predicted goals from most_likely_score
     try:
         score_parts = most_likely_score.split("-")
         home_predicted_goals = int(score_parts[0].strip())
@@ -248,101 +252,110 @@ def get_recommendations_from_predictions(fixture_data):
         away_predicted_goals = 0
         total_predicted_goals = 0
 
-    # Expected goals
-    expected_goals = predictions.get("expected_goals", {})
-    home_xg = expected_goals.get("home", 0)
-    away_xg = expected_goals.get("away", 0)
-    xg_diff = home_xg - away_xg
+    # ── Gap 3: Table proximity — blocks ALL bet types if triggered ─────────────
+    if is_table_proximity_risk(fixture_data):
+        print(f'[{fixture_id}] EXCLUDED — table proximity risk')
+        return recommendations
 
-    # PRIORITY 1: Match Winner
+    # ── PRIORITY 1: Match Winner ───────────────────────────────────────────────
     if home_win_prob > VERY_HIGH_PROB_THRESHOLD and home_win_prob - away_win_prob > SIGNIFICANT_DIFF:
         if home_wins == len(top_scores) and home_wins > 0:
-            for option in odds.get("Match Winner", []):
-                if option["value"] == "Home" and THRESHOLD <= float(option["odd"]) <= LIMIT:
-                    recommendations.append({
-                        "fixture_id": fixture_id,
-                        "recommendation": "Home Win",
-                        "value": "Home",
-                        "odds": float(option["odd"]),
-                        "confidence": "High",
-                        "reasoning": f"Strong home win probability ({home_win_prob}%) confirmed by all top score predictions"
-                    })
-                    return recommendations
+            margin_ok, min_margin = check_projected_margin(top_scores, is_home_winner=True)
+            if not margin_ok:
+                print(f'[{fixture_id}] Home win SKIPPED — projected margin insufficient (min={min_margin})')
+            else:
+                for option in odds.get("Match Winner", []):
+                    if option["value"] == "Home" and THRESHOLD <= float(option["odd"]) <= LIMIT:
+                        recommendations.append({
+                            "fixture_id": fixture_id,
+                            "recommendation": "Home Win",
+                            "value": "Home",
+                            "odds": float(option["odd"]),
+                            "confidence": "High",
+                            "reasoning": (
+                                f"Strong home win probability ({home_win_prob}%) confirmed by all "
+                                f"top score predictions. Worst-case projected margin: {min_margin} goals."
+                            )
+                        })
+                        return recommendations
 
     if away_win_prob > VERY_HIGH_PROB_THRESHOLD and away_win_prob - home_win_prob > SIGNIFICANT_DIFF:
         if away_wins == len(top_scores) and away_wins > 0:
-            for option in odds.get("Match Winner", []):
-                if option["value"] == "Away" and THRESHOLD <= float(option["odd"]) <= LIMIT:
-                    recommendations.append({
-                        "fixture_id": fixture_id,
-                        "recommendation": "Away Win",
-                        "value": "Away",
-                        "odds": float(option["odd"]),
-                        "confidence": "High",
-                        "reasoning": f"Strong away win probability ({away_win_prob}%) confirmed by all top score predictions"
-                    })
-                    return recommendations
+            margin_ok, min_margin = check_projected_margin(top_scores, is_home_winner=False)
+            if not margin_ok:
+                print(f'[{fixture_id}] Away win SKIPPED — projected margin insufficient (min={min_margin})')
+            else:
+                for option in odds.get("Match Winner", []):
+                    if option["value"] == "Away" and THRESHOLD <= float(option["odd"]) <= LIMIT:
+                        recommendations.append({
+                            "fixture_id": fixture_id,
+                            "recommendation": "Away Win",
+                            "value": "Away",
+                            "odds": float(option["odd"]),
+                            "confidence": "High",
+                            "reasoning": (
+                                f"Strong away win probability ({away_win_prob}%) confirmed by all "
+                                f"top score predictions. Worst-case projected margin: {min_margin} goals."
+                            )
+                        })
+                        return recommendations
 
-    # PRIORITY 2: Double Chance
+    # ── PRIORITY 2: Double Chance ──────────────────────────────────────────────
     home_perf = fixture_data.get("home", {}).get("home_performance", 0)
     away_perf = fixture_data.get("away", {}).get("away_performance", 0)
     perf_diff = home_perf - away_perf
     perf_diff_mag = abs(perf_diff)
     is_home_favourite = perf_diff > 0
 
-    # Gap 2: dynamic threshold — tighter if projected winner is on a winless run
+    # Gap 2: dynamic threshold — float('inf') hard-excludes streak ≥ WINLESS_STREAK_EXCLUDE
     perf_diff_threshold = get_adjusted_perf_threshold(fixture_data, is_home_favourite)
 
     if perf_diff_mag >= perf_diff_threshold:
-        print(f'Perf_Diff: {perf_diff_mag} (threshold: {perf_diff_threshold})')
+        print(f'[{fixture_id}] Perf_Diff: {perf_diff_mag:.2f} (threshold: {perf_diff_threshold})')
 
-        # Gap 3: skip if the table gap is within catching distance
-        if is_table_proximity_risk(fixture_data):
-            print('Table proximity risk detected — skipping Double Chance')
-        elif perf_diff > 0:
-            # Gap 4: replace circular xG gate with cross-variant margin check
-            min_margin = _get_min_variant_margin(fixture_data, home_is_favourite=True)
-            if min_margin >= 1:
-                # Gap 1: confirm recent venue dominance
-                if check_qualified_win_consistency(fixture_data, is_home_favourite=True):
-                    if away_wins == 0 and len(top_scores) > 0:
-                        for option in odds.get("Double Chance", []):
-                            if option["value"] == "Home/Draw" and THRESHOLD <= float(option["odd"]) <= LIMIT:
-                                recommendations.append({
-                                    "fixture_id": fixture_id,
-                                    "recommendation": "Double Chance",
-                                    "value": "Home/Draw",
-                                    "odds": float(option["odd"]),
-                                    "confidence": "High",
-                                    "reasoning": (
-                                        f"Home stronger (perf: {home_perf:.2f} vs {away_perf:.2f}), "
-                                        f"worst-case variant margin {min_margin:.2f}, "
-                                        f"venue dominance confirmed, no predicted away wins"
-                                    )
-                                })
-                                return recommendations
-        elif perf_diff < 0:
-            # Gap 4: away-side variant margin check
-            min_margin = _get_min_variant_margin(fixture_data, home_is_favourite=False)
-            if min_margin >= 1:
-                # Gap 1: confirm away team's venue dominance
-                if check_qualified_win_consistency(fixture_data, is_home_favourite=False):
-                    if home_wins == 0 and len(top_scores) > 0:
-                        for option in odds.get("Double Chance", []):
-                            if option["value"] == "Draw/Away" and THRESHOLD <= float(option["odd"]) <= LIMIT:
-                                recommendations.append({
-                                    "fixture_id": fixture_id,
-                                    "recommendation": "Double Chance",
-                                    "value": "Draw/Away",
-                                    "odds": float(option["odd"]),
-                                    "confidence": "High",
-                                    "reasoning": (
-                                        f"Away stronger (perf: {away_perf:.2f} vs {home_perf:.2f}), "
-                                        f"worst-case variant margin {min_margin:.2f}, "
-                                        f"venue dominance confirmed, no predicted home wins"
-                                    )
-                                })
-                                return recommendations
+        if perf_diff > 0 and away_wins == 0 and len(top_scores) > 0:
+            # Gap 4: ±1 band margin check (consistent with Match Winner gate)
+            margin_ok, min_margin = check_projected_margin(top_scores, is_home_winner=True)
+            if not margin_ok:
+                print(f'[{fixture_id}] DC Home/Draw SKIPPED — projected margin insufficient (min={min_margin})')
+            # Gap 1: historical venue dominance
+            elif check_qualified_win_consistency(fixture_data, is_home_favourite=True):
+                for option in odds.get("Double Chance", []):
+                    if option["value"] == "Home/Draw" and THRESHOLD <= float(option["odd"]) <= LIMIT:
+                        recommendations.append({
+                            "fixture_id": fixture_id,
+                            "recommendation": "Double Chance",
+                            "value": "Home/Draw",
+                            "odds": float(option["odd"]),
+                            "confidence": "High",
+                            "reasoning": (
+                                f"Home stronger (perf: {home_perf:.2f} vs {away_perf:.2f}), "
+                                f"worst-case projected margin {min_margin} goals, "
+                                f"venue dominance confirmed, no predicted away wins"
+                            )
+                        })
+                        return recommendations
+
+        elif perf_diff < 0 and home_wins == 0 and len(top_scores) > 0:
+            margin_ok, min_margin = check_projected_margin(top_scores, is_home_winner=False)
+            if not margin_ok:
+                print(f'[{fixture_id}] DC Draw/Away SKIPPED — projected margin insufficient (min={min_margin})')
+            elif check_qualified_win_consistency(fixture_data, is_home_favourite=False):
+                for option in odds.get("Double Chance", []):
+                    if option["value"] == "Draw/Away" and THRESHOLD <= float(option["odd"]) <= LIMIT:
+                        recommendations.append({
+                            "fixture_id": fixture_id,
+                            "recommendation": "Double Chance",
+                            "value": "Draw/Away",
+                            "odds": float(option["odd"]),
+                            "confidence": "High",
+                            "reasoning": (
+                                f"Away stronger (perf: {away_perf:.2f} vs {home_perf:.2f}), "
+                                f"worst-case projected margin {min_margin} goals, "
+                                f"venue dominance confirmed, no predicted home wins"
+                            )
+                        })
+                        return recommendations
 
     # PRIORITY 3: Over 1.5 Goals
     over_1_5_prob = over_goals.get("1.5", 0)
@@ -417,11 +430,56 @@ def check_qualified_win_consistency(fixture_data, is_home_favourite):
     return qualified_wins >= 2
 
 
+def check_projected_margin(top_scores, is_home_winner):
+    """
+    Apply a ±1 goal uncertainty band to every top predicted score and check
+    whether the projected winner still leads in the worst-case scenario.
+
+    For each score, worst case = winner scores -1, loser scores +1.
+    Returns True only if min_margin >= MIN_PROJECTED_MARGIN across all scores.
+
+    Args:
+        top_scores:    list of {"score": "H-A", ...} dicts from predictions.top_scores
+        is_home_winner: True if home team is the projected winner
+
+    Returns:
+        (passes: bool, min_margin: int)
+    """
+    if not top_scores:
+        return False, 0
+
+    margins = []
+    for score_obj in top_scores:
+        score = score_obj.get("score", "0-0")
+        try:
+            home_g, away_g = map(int, score.split("-"))
+        except (ValueError, IndexError):
+            continue
+        if is_home_winner:
+            margin = (home_g - 1) - (away_g + 1)   # worst case: home -1, away +1
+        else:
+            margin = (away_g - 1) - (home_g + 1)   # worst case: away -1, home +1
+        margins.append(margin)
+
+    if not margins:
+        return False, 0
+
+    min_margin = min(margins)
+    return min_margin >= MIN_PROJECTED_MARGIN, min_margin
+
+
 def get_adjusted_perf_threshold(fixture_data, is_home_favourite):
     """
     Return adjusted performance differential threshold based on the projected winner's
     recent form across all competitions.
-    Standard: 0.40. Elevated to 0.48 on 3+ game winless streak, 0.55 on 4+.
+
+    Thresholds:
+        streak 0-2  → 0.40 (standard)
+        streak 3    → 0.48 (elevated)
+        streak 4    → 0.55 (elevated)
+        streak 5+   → float('inf') (hard exclude — too much uncertainty)
+
+    Uses past_fixtures (the actual stored field) with teams/scores sub-objects.
     """
     team_key = "home" if is_home_favourite else "away"
     team = fixture_data.get(team_key, {})
@@ -442,12 +500,14 @@ def get_adjusted_perf_threshold(fixture_data, is_home_favourite):
             break
         consecutive_without_win += 1
 
-    if consecutive_without_win >= 4:
-        return 0.55
+    if consecutive_without_win >= WINLESS_STREAK_EXCLUDE:
+        return float('inf')   # Hard exclude — streak too long
+    elif consecutive_without_win >= 4:
+        return PERF_DIFF_ELEVATED_4
     elif consecutive_without_win >= 3:
-        return 0.48
+        return PERF_DIFF_ELEVATED_3
     else:
-        return 0.40
+        return PERF_DIFF_BASE
 
 
 _TYPICAL_SEASON_GAMES = 34  # Conservative estimate covering most European league formats
@@ -487,40 +547,6 @@ def is_table_proximity_risk(fixture_data):
     gap_ratio = points_gap / catchable_points
     return gap_ratio < 0.5
 
-
-def _get_min_variant_margin(fixture_data, home_is_favourite):
-    """
-    Returns the worst-case projected goal margin across all four model variants.
-    For a home favourite: min(home variant goals) - max(away variant goals).
-    For an away favourite: min(away variant goals) - max(home variant goals).
-    A value >= 1 means the favourite leads in every variant.
-    """
-    home = fixture_data.get("home", {})
-    away = fixture_data.get("away", {})
-
-    home_variants = [
-        float(home.get("predicted_goals") or 0),
-        float(home.get("predicted_goals_alt") or 0),
-        float(home.get("predicted_goals_venue") or 0),
-        float(home.get("predicted_goals_venue_alt") or 0),
-    ]
-    away_variants = [
-        float(away.get("predicted_goals") or 0),
-        float(away.get("predicted_goals_alt") or 0),
-        float(away.get("predicted_goals_venue") or 0),
-        float(away.get("predicted_goals_venue_alt") or 0),
-    ]
-
-    home_variants = [v for v in home_variants if v > 0]
-    away_variants = [v for v in away_variants if v > 0]
-
-    if not home_variants or not away_variants:
-        return 0  # Missing variant data — don't qualify
-
-    if home_is_favourite:
-        return min(home_variants) - max(away_variants)
-    else:
-        return min(away_variants) - max(home_variants)
 
 
 def analyze_score_predictions(top_scores, most_likely_score):
