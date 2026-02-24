@@ -671,24 +671,27 @@ def get_league_teams(league_id, season, max_retries=DEFAULT_MAX_RETRIES):
 
 def get_last_five_games(team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
     """
-    Get the last five games for a team in a specific league and season.
+    Get the last ten games for a team in a specific league and season.
     Returns legacy-compatible nested structure with teams and scores objects.
-    
+
+    Fetches 10 matches (increased from 5) so that venue-split analysis
+    (home-only or away-only filtering) has enough samples to be reliable.
+
     Args:
         team_id: Team identifier
         league_id: League identifier
         season: Season year
         max_retries: Maximum retry attempts
-        
+
     Returns:
-        List of last five games in legacy format or empty list if not found
+        List of last ten games in legacy format or empty list if not found
     """
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
     params = {
         "team": str(team_id),
         "league": str(league_id),
         "season": str(season),
-        "last": "5"
+        "last": "10"
     }
     
     data = _make_api_request(url, params, max_retries=max_retries)
