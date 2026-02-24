@@ -23,7 +23,9 @@ from ..data.api_client import (
     get_head_to_head,
     get_injured_players,
     get_league_start_date,
-    process_injuries
+    process_injuries,
+    log_rate_limit_summary,
+    reset_rate_limit_stats
 )
 from ..data.database_client import (
     get_team_params_from_db,
@@ -43,17 +45,23 @@ def lambda_handler(event, context):
     Thin orchestration layer that delegates to modular components.
     """
     print("Events:", json.dumps(event))
-    
-    # Loop through all records (each record corresponds to a single SQS message) 
+
+    # Reset rate limiting stats at start of each Lambda invocation
+    reset_rate_limit_stats()
+
+    # Loop through all records (each record corresponds to a single SQS message)
     for record in event['Records']:
         # Parse the 'body' field from the SQS message
         body = json.loads(record['body'])
-        
+
         # Extract fixtures from payload
         fixtures = body.get('payload', [])
-        
+
         # Process each fixture
         process_fixtures(fixtures)
+
+    # Log rate limiting summary at end of execution
+    log_rate_limit_summary()
 
 
 def process_fixtures(fixtures):

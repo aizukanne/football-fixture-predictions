@@ -1,13 +1,22 @@
 """
 API client for interacting with API-Football external service.
 Consolidates all external API calls with consistent retry logic and error handling.
+
+Rate limiting features:
+- Request throttling with configurable minimum spacing (default 100ms)
+- Exponential backoff with jitter for 429 errors
+- Circuit breaker pattern for persistent failures
+- Per-execution caching to reduce redundant API calls
+- Request metrics and logging
 """
 
 import os
 import random
 import requests
 import time
+import threading
 from datetime import datetime, timedelta
+from functools import wraps
 
 from ..utils.constants import (
     API_FOOTBALL_BASE_URL,
@@ -22,11 +31,343 @@ from ..utils.constants import (
 rapidapi_key = os.getenv('RAPIDAPI_KEY')
 
 
+# =============================================================================
+# REQUEST THROTTLING
+# =============================================================================
+MIN_REQUEST_INTERVAL = 0.1  # 100ms minimum between requests
+_last_request_time = 0
+_request_lock = threading.Lock()
+
+
+def _throttle():
+    """
+    Enforce minimum spacing between API requests to prevent burst 429s.
+    Thread-safe implementation using lock.
+    """
+    global _last_request_time
+    with _request_lock:
+        now = time.time()
+        elapsed = now - _last_request_time
+        if elapsed < MIN_REQUEST_INTERVAL:
+            sleep_time = MIN_REQUEST_INTERVAL - elapsed
+            time.sleep(sleep_time)
+        _last_request_time = time.time()
+
+
+# =============================================================================
+# CIRCUIT BREAKER
+# =============================================================================
+class CircuitBreaker:
+    """
+    Circuit breaker pattern to prevent cascading failures.
+
+    States:
+    - CLOSED: Normal operation, requests pass through
+    - OPEN: Too many failures, requests fail fast
+    - HALF_OPEN: Testing if service has recovered
+    """
+
+    CLOSED = "CLOSED"
+    OPEN = "OPEN"
+    HALF_OPEN = "HALF_OPEN"
+
+    def __init__(self, failure_threshold=5, reset_timeout=60, half_open_max_calls=3):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.half_open_max_calls = half_open_max_calls
+
+        self._state = self.CLOSED
+        self._failure_count = 0
+        self._last_failure_time = None
+        self._half_open_calls = 0
+        self._lock = threading.Lock()
+
+    @property
+    def state(self):
+        with self._lock:
+            if self._state == self.OPEN:
+                # Check if reset timeout has passed
+                if self._last_failure_time and \
+                   time.time() - self._last_failure_time >= self.reset_timeout:
+                    self._state = self.HALF_OPEN
+                    self._half_open_calls = 0
+                    print(f"Circuit breaker transitioning to HALF_OPEN after {self.reset_timeout}s timeout")
+            return self._state
+
+    def record_success(self):
+        """Record a successful call."""
+        with self._lock:
+            if self._state == self.HALF_OPEN:
+                self._half_open_calls += 1
+                if self._half_open_calls >= self.half_open_max_calls:
+                    self._state = self.CLOSED
+                    self._failure_count = 0
+                    print("Circuit breaker CLOSED after successful half-open calls")
+            elif self._state == self.CLOSED:
+                self._failure_count = 0
+
+    def record_failure(self):
+        """Record a failed call."""
+        with self._lock:
+            self._failure_count += 1
+            self._last_failure_time = time.time()
+
+            if self._state == self.HALF_OPEN:
+                self._state = self.OPEN
+                print("Circuit breaker OPEN after failure in half-open state")
+            elif self._state == self.CLOSED and self._failure_count >= self.failure_threshold:
+                self._state = self.OPEN
+                print(f"Circuit breaker OPEN after {self._failure_count} consecutive failures")
+
+    def can_execute(self):
+        """Check if a request can be executed."""
+        state = self.state  # This may trigger state transition
+        if state == self.OPEN:
+            return False
+        return True
+
+    def reset(self):
+        """Manually reset the circuit breaker."""
+        with self._lock:
+            self._state = self.CLOSED
+            self._failure_count = 0
+            self._last_failure_time = None
+            self._half_open_calls = 0
+
+
+# Global circuit breaker instance
+_circuit_breaker = CircuitBreaker(
+    failure_threshold=5,
+    reset_timeout=60,
+    half_open_max_calls=3
+)
+
+
+# =============================================================================
+# PER-EXECUTION CACHE
+# =============================================================================
+class ExecutionCache:
+    """
+    In-memory cache for data within a single Lambda execution.
+    Reduces redundant API calls for the same team/fixture data.
+
+    Cache is automatically cleared when Lambda container is recycled.
+    For long-running processes, use clear() or set max_age.
+    """
+
+    def __init__(self, max_age=300):  # 5 minute default max age
+        self._cache = {}
+        self._timestamps = {}
+        self._max_age = max_age
+        self._lock = threading.Lock()
+        self._stats = {"hits": 0, "misses": 0}
+
+    def _make_key(self, func_name, *args, **kwargs):
+        """Create a cache key from function name and arguments."""
+        # Convert args to a hashable form
+        key_parts = [func_name]
+        for arg in args:
+            if isinstance(arg, (list, dict)):
+                key_parts.append(str(arg))
+            else:
+                key_parts.append(str(arg))
+        for k, v in sorted(kwargs.items()):
+            key_parts.append(f"{k}={v}")
+        return ":".join(key_parts)
+
+    def get(self, func_name, *args, **kwargs):
+        """Get cached value if exists and not expired."""
+        key = self._make_key(func_name, *args, **kwargs)
+        with self._lock:
+            if key in self._cache:
+                # Check if expired
+                if time.time() - self._timestamps[key] < self._max_age:
+                    self._stats["hits"] += 1
+                    return self._cache[key], True
+                else:
+                    # Expired, remove from cache
+                    del self._cache[key]
+                    del self._timestamps[key]
+            self._stats["misses"] += 1
+            return None, False
+
+    def set(self, value, func_name, *args, **kwargs):
+        """Store value in cache."""
+        key = self._make_key(func_name, *args, **kwargs)
+        with self._lock:
+            self._cache[key] = value
+            self._timestamps[key] = time.time()
+
+    def clear(self):
+        """Clear all cached data."""
+        with self._lock:
+            self._cache.clear()
+            self._timestamps.clear()
+            self._stats = {"hits": 0, "misses": 0}
+
+    def get_stats(self):
+        """Get cache statistics."""
+        with self._lock:
+            total = self._stats["hits"] + self._stats["misses"]
+            hit_rate = self._stats["hits"] / total if total > 0 else 0
+            return {
+                "hits": self._stats["hits"],
+                "misses": self._stats["misses"],
+                "total": total,
+                "hit_rate": f"{hit_rate:.1%}",
+                "cache_size": len(self._cache)
+            }
+
+
+# Global execution cache instance
+_execution_cache = ExecutionCache(max_age=300)
+
+
+def cached(func):
+    """Decorator to cache function results within execution."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Check cache first
+        cached_value, found = _execution_cache.get(func.__name__, *args, **kwargs)
+        if found:
+            return cached_value
+
+        # Execute function and cache result
+        result = func(*args, **kwargs)
+        _execution_cache.set(result, func.__name__, *args, **kwargs)
+        return result
+    return wrapper
+
+
+# =============================================================================
+# REQUEST METRICS
+# =============================================================================
+class RequestMetrics:
+    """Track API request metrics for monitoring and debugging."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._reset_metrics()
+
+    def _reset_metrics(self):
+        self._metrics = {
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "rate_limited_requests": 0,
+            "retries": 0,
+            "total_wait_time": 0.0,
+            "circuit_breaker_rejections": 0,
+            "cache_hits": 0,
+            "status_codes": {}
+        }
+        self._start_time = time.time()
+
+    def record_request(self, status_code=None, wait_time=0, retried=False,
+                       rate_limited=False, circuit_rejected=False, cache_hit=False):
+        """Record metrics for a request."""
+        with self._lock:
+            self._metrics["total_requests"] += 1
+
+            if cache_hit:
+                self._metrics["cache_hits"] += 1
+                return
+
+            if circuit_rejected:
+                self._metrics["circuit_breaker_rejections"] += 1
+                self._metrics["failed_requests"] += 1
+                return
+
+            if status_code:
+                self._metrics["status_codes"][status_code] = \
+                    self._metrics["status_codes"].get(status_code, 0) + 1
+
+                if status_code == 200:
+                    self._metrics["successful_requests"] += 1
+                elif status_code == 429:
+                    self._metrics["rate_limited_requests"] += 1
+                else:
+                    self._metrics["failed_requests"] += 1
+
+            if retried:
+                self._metrics["retries"] += 1
+
+            self._metrics["total_wait_time"] += wait_time
+
+    def get_metrics(self):
+        """Get current metrics summary."""
+        with self._lock:
+            elapsed = time.time() - self._start_time
+            total = self._metrics["total_requests"]
+
+            return {
+                **self._metrics,
+                "elapsed_seconds": round(elapsed, 2),
+                "requests_per_second": round(total / elapsed, 2) if elapsed > 0 else 0,
+                "success_rate": f"{self._metrics['successful_requests'] / total:.1%}" if total > 0 else "N/A",
+                "cache_hit_rate": f"{self._metrics['cache_hits'] / total:.1%}" if total > 0 else "N/A"
+            }
+
+    def reset(self):
+        """Reset all metrics."""
+        with self._lock:
+            self._reset_metrics()
+
+    def log_summary(self):
+        """Log a summary of current metrics."""
+        metrics = self.get_metrics()
+        print(f"=== API Request Metrics ===")
+        print(f"Total requests: {metrics['total_requests']} ({metrics['requests_per_second']} req/s)")
+        print(f"Success rate: {metrics['success_rate']}")
+        print(f"Cache hit rate: {metrics['cache_hit_rate']}")
+        print(f"Rate limited: {metrics['rate_limited_requests']}")
+        print(f"Circuit breaker rejections: {metrics['circuit_breaker_rejections']}")
+        print(f"Total retries: {metrics['retries']}")
+        print(f"Total wait time: {metrics['total_wait_time']:.1f}s")
+        if metrics['status_codes']:
+            print(f"Status codes: {metrics['status_codes']}")
+
+
+# Global metrics instance
+_request_metrics = RequestMetrics()
+
+
+# =============================================================================
+# PUBLIC UTILITIES
+# =============================================================================
+def get_rate_limit_stats():
+    """Get current rate limiting statistics."""
+    return {
+        "circuit_breaker_state": _circuit_breaker.state,
+        "cache_stats": _execution_cache.get_stats(),
+        "request_metrics": _request_metrics.get_metrics()
+    }
+
+
+def reset_rate_limit_stats():
+    """Reset all rate limiting statistics (useful for testing)."""
+    _execution_cache.clear()
+    _request_metrics.reset()
+    _circuit_breaker.reset()
+
+
+def log_rate_limit_summary():
+    """Log a summary of rate limiting statistics."""
+    print(f"\n=== Rate Limiting Summary ===")
+    print(f"Circuit breaker state: {_circuit_breaker.state}")
+    print(f"Cache stats: {_execution_cache.get_stats()}")
+    _request_metrics.log_summary()
+
+
 def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RETRIES):
     """
     Base method for making API requests with robust retry logic for 429 and other errors.
 
-    Implements exponential backoff with jitter for 429 (rate limit) errors.
+    Features:
+    - Exponential backoff with jitter for 429 (rate limit) errors
+    - Request throttling (100ms minimum spacing)
+    - Circuit breaker to prevent cascading failures
+    - Request metrics tracking
 
     Args:
         url: API endpoint URL
@@ -37,6 +378,12 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
     Returns:
         JSON response data or None if failed
     """
+    # Check circuit breaker first
+    if not _circuit_breaker.can_execute():
+        print(f"Circuit breaker OPEN - rejecting request to {url}")
+        _request_metrics.record_request(circuit_rejected=True)
+        return {"response": {}}
+
     if headers is None:
         headers = {
             "X-RapidAPI-Key": rapidapi_key,
@@ -45,9 +392,13 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
 
     retries = 0
     base_wait = MIN_WAIT_TIME
+    total_wait_time = 0
 
     while retries < max_retries:
         try:
+            # Throttle requests to prevent burst 429s
+            _throttle()
+
             response = requests.get(url, headers=headers, params=params, timeout=30)
 
             if response.status_code == 200:
@@ -55,16 +406,22 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
                     data = response.json()
                     if 'response' not in data:
                         print(f"Warning: 'response' key missing in API response. Full response: {data}")
+                        _request_metrics.record_request(status_code=200, wait_time=total_wait_time)
+                        _circuit_breaker.record_success()
                         return {"response": {}}
+                    _request_metrics.record_request(status_code=200, wait_time=total_wait_time)
+                    _circuit_breaker.record_success()
                     return data
                 except Exception as e:
                     print(f"Error parsing API response: {e}")
                     print(f"Response content: {response.text[:200]}...")
+                    _request_metrics.record_request(status_code=200, wait_time=total_wait_time)
                     return {"response": {}}
 
             elif response.status_code == 429:
                 # Rate limit hit - use exponential backoff with jitter
                 retries += 1
+                _request_metrics.record_request(status_code=429, retried=True, rate_limited=True)
 
                 # Check if we have Retry-After header
                 retry_after = response.headers.get('Retry-After')
@@ -81,6 +438,7 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
                 # Add jitter (randomness) to prevent thundering herd
                 jitter = random.uniform(0, wait_time * 0.3)
                 final_wait = wait_time + jitter
+                total_wait_time += final_wait
 
                 print(f"Rate limit (429) hit. Retry {retries}/{max_retries}. Waiting {final_wait:.1f}s...")
                 time.sleep(final_wait)
@@ -89,6 +447,8 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
                 # Server errors - retry with backoff
                 retries += 1
                 wait_time = min(base_wait * (2 ** (retries - 1)), MAX_WAIT_TIME)
+                total_wait_time += wait_time
+                _request_metrics.record_request(status_code=response.status_code, retried=True, wait_time=wait_time)
                 print(f"Server error {response.status_code}. Retry {retries}/{max_retries}. Waiting {wait_time}s...")
                 time.sleep(wait_time)
 
@@ -96,48 +456,61 @@ def _make_api_request(url, params=None, headers=None, max_retries=DEFAULT_MAX_RE
                 # Authentication error - don't retry
                 print(f"Authentication error (401): Invalid API key")
                 print(f"Response: {response.text}")
+                _request_metrics.record_request(status_code=401, wait_time=total_wait_time)
+                _circuit_breaker.record_failure()
                 return {"response": {}}
 
             else:
                 # Other errors - don't retry
                 print(f"Error in API call: Status code {response.status_code}")
                 print(f"Response content: {response.text}")
+                _request_metrics.record_request(status_code=response.status_code, wait_time=total_wait_time)
+                _circuit_breaker.record_failure()
                 return {"response": {}}
 
         except requests.exceptions.Timeout:
             retries += 1
             wait_time = min(base_wait * (2 ** (retries - 1)), MAX_WAIT_TIME)
+            total_wait_time += wait_time
+            _request_metrics.record_request(retried=True, wait_time=wait_time)
             print(f"Request timeout. Retry {retries}/{max_retries}. Waiting {wait_time}s...")
             time.sleep(wait_time)
 
         except requests.exceptions.RequestException as e:
             print(f"Request exception: {e}")
+            _request_metrics.record_request(wait_time=total_wait_time)
+            _circuit_breaker.record_failure()
             return {"response": {}}
 
     print(f"Max retries ({max_retries}) reached. Request failed.")
+    _request_metrics.record_request(wait_time=total_wait_time)
+    _circuit_breaker.record_failure()
     return {"response": {}}
 
 
+@cached
 def get_league_start_date(league_id, max_retries=DEFAULT_MAX_RETRIES):
     """
     Fetch the start date of the current season for a given league.
-    
+
+    Cached within execution to avoid redundant API calls.
+
     Args:
         league_id: The league ID
         max_retries: Maximum number of retries for 429 errors
-        
+
     Returns:
         The start date of the league season (format: YYYY-MM-DD) or None if not found
     """
     url = f"{API_FOOTBALL_BASE_URL}/leagues"
     params = {"id": league_id, "current": "true"}
-    
+
     data = _make_api_request(url, params, max_retries=max_retries)
-    
+
     if not data or "response" not in data or not data["response"]:
         print("Error: Unexpected API response format or no data found")
         return None
-    
+
     try:
         # Extract the start date of the current season
         seasons = data["response"][0].get("seasons", [])
@@ -147,20 +520,23 @@ def get_league_start_date(league_id, max_retries=DEFAULT_MAX_RETRIES):
     except (IndexError, KeyError, TypeError):
         print("Error: Failed to extract league start date")
         return None
-    
+
     return None
 
 
+@cached
 def get_team_statistics(league_id, season, team_id, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get team statistics for a specific league, season, and team.
-    
+
+    Cached within execution to avoid redundant API calls for the same team.
+
     Args:
         league_id: League identifier
         season: Season year
         team_id: Team identifier
         max_retries: Maximum retry attempts
-        
+
     Returns:
         API response with team statistics
     """
@@ -172,9 +548,9 @@ def get_team_statistics(league_id, season, team_id, max_retries=DEFAULT_MAX_RETR
         "team": str(team_id),
         "date": yesterday
     }
-    
+
     data = _make_api_request(url, params, max_retries=max_retries)
-    
+
     # Handle list response format
     if data and isinstance(data.get('response'), list):
         if len(data['response']) > 0:
@@ -183,7 +559,7 @@ def get_team_statistics(league_id, season, team_id, max_retries=DEFAULT_MAX_RETR
         else:
             print("Empty response list received")
             data = {"response": {}}
-    
+
     return data
 
 
@@ -210,19 +586,22 @@ def get_fixture_events(fixture_id, max_retries=DEFAULT_MAX_RETRIES):
     return data
 
 
+@cached
 def get_venue_id(team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get the venue ID for a given team in a league and season.
-    
+
+    Cached within execution to avoid redundant API calls for the same team/venue.
+
     Args:
         team_id: API-Football team ID
         league_id: API-Football league ID
         season: Season year
         max_retries: Maximum times to retry for HTTP 429
-        
+
     Returns:
         Venue ID or None if not found
-        
+
     Raises:
         Exception: Descriptive message if unable to fetch or parse the venue ID
     """
@@ -232,18 +611,18 @@ def get_venue_id(team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
         "league": str(league_id),
         "season": str(season)
     }
-    
+
     data = _make_api_request(url, params, max_retries=max_retries)
-    
+
     if not data or "response" not in data or not data["response"]:
         raise Exception(f"No response data for team {team_id} in league {league_id}, season {season}")
-    
+
     try:
         venue_info = data["response"][0]["venue"]
         venue_id = venue_info["id"]
         venue_name = venue_info["name"]
         venue_city = venue_info["city"]
-        
+
         return {
             "venue_id": venue_id,
             "venue_name": venue_name,
@@ -253,15 +632,18 @@ def get_venue_id(team_id, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
         raise Exception(f"Failed to parse venue data for team {team_id}: {e}")
 
 
+@cached
 def get_league_teams(league_id, season, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get all teams in a specific league and season.
-    
+
+    Cached within execution to avoid redundant API calls.
+
     Args:
         league_id: League identifier
         season: Season year
         max_retries: Maximum retry attempts
-        
+
     Returns:
         List of teams in the league
     """
@@ -270,20 +652,20 @@ def get_league_teams(league_id, season, max_retries=DEFAULT_MAX_RETRIES):
         "league": str(league_id),
         "season": str(season)
     }
-    
+
     data = _make_api_request(url, params, max_retries=max_retries)
-    
+
     if not data or "response" not in data:
         print(f"No teams data found for league {league_id}")
         return []
-    
+
     teams = []
     for team_data in data["response"]:
         teams.append({
             "team_id": team_data["team"]["id"],
             "team_name": team_data["team"]["name"]
         })
-    
+
     return teams
 
 
@@ -683,6 +1065,10 @@ def get_fixtures_goals_by_ids(fixture_ids, max_retries=DEFAULT_MAX_RETRIES):
     This is the database-first approach: query DB for fixture IDs first, then fetch
     only those specific fixtures from the API. More efficient than querying by date range.
 
+    Features:
+    - Deduplicates fixture IDs before making API calls
+    - Batches requests in groups of 20 (API limit)
+
     Args:
         fixture_ids: List of fixture IDs to fetch goals for
         max_retries: Maximum retry attempts
@@ -693,13 +1079,18 @@ def get_fixtures_goals_by_ids(fixture_ids, max_retries=DEFAULT_MAX_RETRIES):
     if not fixture_ids:
         return {}
 
+    # Deduplicate fixture IDs to avoid redundant API calls
+    unique_fixture_ids = list(set(fixture_ids))
+    if len(unique_fixture_ids) < len(fixture_ids):
+        print(f"Deduplicated fixture IDs: {len(fixture_ids)} -> {len(unique_fixture_ids)}")
+
     url = f"{API_FOOTBALL_BASE_URL}/fixtures"
     goals_dict = {}
 
     # Process fixture_ids in batches of 20 (API limit)
     batch_size = 20
-    for i in range(0, len(fixture_ids), batch_size):
-        batch = fixture_ids[i:i + batch_size]
+    for i in range(0, len(unique_fixture_ids), batch_size):
+        batch = unique_fixture_ids[i:i + batch_size]
         ids_str = '-'.join(map(str, batch))
         params = {"ids": ids_str}
 

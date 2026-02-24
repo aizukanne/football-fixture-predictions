@@ -288,38 +288,61 @@ def get_recommendations_from_predictions(fixture_data):
     away_perf = fixture_data.get("away", {}).get("away_performance", 0)
     perf_diff = home_perf - away_perf
     perf_diff_mag = abs(perf_diff)
-    PERF_DIFF_SIGNIFICANT = 0.40
+    is_home_favourite = perf_diff > 0
 
-    if perf_diff_mag >= PERF_DIFF_SIGNIFICANT:
-        print(f'Perf_Diff: {perf_diff_mag}')
+    # Gap 2: dynamic threshold — tighter if projected winner is on a winless run
+    perf_diff_threshold = get_adjusted_perf_threshold(fixture_data, is_home_favourite)
 
-        if perf_diff > 0 and xg_diff >= 1.5:
-            if away_wins == 0 and len(top_scores) > 0:
-                for option in odds.get("Double Chance", []):
-                    if option["value"] == "Home/Draw" and THRESHOLD <= float(option["odd"]) <= LIMIT:
-                        recommendations.append({
-                            "fixture_id": fixture_id,
-                            "recommendation": "Double Chance",
-                            "value": "Home/Draw",
-                            "odds": float(option["odd"]),
-                            "confidence": "High",
-                            "reasoning": f"Home stronger (perf: {home_perf:.2f} vs {away_perf:.2f}), xG gap of {xg_diff:.1f}, no predicted away wins"
-                        })
-                        return recommendations
+    if perf_diff_mag >= perf_diff_threshold:
+        print(f'Perf_Diff: {perf_diff_mag} (threshold: {perf_diff_threshold})')
 
-        elif perf_diff < 0 and xg_diff <= -1.5:
-            if home_wins == 0 and len(top_scores) > 0:
-                for option in odds.get("Double Chance", []):
-                    if option["value"] == "Draw/Away" and THRESHOLD <= float(option["odd"]) <= LIMIT:
-                        recommendations.append({
-                            "fixture_id": fixture_id,
-                            "recommendation": "Double Chance",
-                            "value": "Draw/Away",
-                            "odds": float(option["odd"]),
-                            "confidence": "High",
-                            "reasoning": f"Away stronger (perf: {away_perf:.2f} vs {home_perf:.2f}), xG gap of {abs(xg_diff):.1f}, no predicted home wins"
-                        })
-                        return recommendations
+        # Gap 3: skip if the table gap is within catching distance
+        if is_table_proximity_risk(fixture_data):
+            print('Table proximity risk detected — skipping Double Chance')
+        elif perf_diff > 0:
+            # Gap 4: replace circular xG gate with cross-variant margin check
+            min_margin = _get_min_variant_margin(fixture_data, home_is_favourite=True)
+            if min_margin >= 1:
+                # Gap 1: confirm recent venue dominance
+                if check_qualified_win_consistency(fixture_data, is_home_favourite=True):
+                    if away_wins == 0 and len(top_scores) > 0:
+                        for option in odds.get("Double Chance", []):
+                            if option["value"] == "Home/Draw" and THRESHOLD <= float(option["odd"]) <= LIMIT:
+                                recommendations.append({
+                                    "fixture_id": fixture_id,
+                                    "recommendation": "Double Chance",
+                                    "value": "Home/Draw",
+                                    "odds": float(option["odd"]),
+                                    "confidence": "High",
+                                    "reasoning": (
+                                        f"Home stronger (perf: {home_perf:.2f} vs {away_perf:.2f}), "
+                                        f"worst-case variant margin {min_margin:.2f}, "
+                                        f"venue dominance confirmed, no predicted away wins"
+                                    )
+                                })
+                                return recommendations
+        elif perf_diff < 0:
+            # Gap 4: away-side variant margin check
+            min_margin = _get_min_variant_margin(fixture_data, home_is_favourite=False)
+            if min_margin >= 1:
+                # Gap 1: confirm away team's venue dominance
+                if check_qualified_win_consistency(fixture_data, is_home_favourite=False):
+                    if home_wins == 0 and len(top_scores) > 0:
+                        for option in odds.get("Double Chance", []):
+                            if option["value"] == "Draw/Away" and THRESHOLD <= float(option["odd"]) <= LIMIT:
+                                recommendations.append({
+                                    "fixture_id": fixture_id,
+                                    "recommendation": "Double Chance",
+                                    "value": "Draw/Away",
+                                    "odds": float(option["odd"]),
+                                    "confidence": "High",
+                                    "reasoning": (
+                                        f"Away stronger (perf: {away_perf:.2f} vs {home_perf:.2f}), "
+                                        f"worst-case variant margin {min_margin:.2f}, "
+                                        f"venue dominance confirmed, no predicted home wins"
+                                    )
+                                })
+                                return recommendations
 
     # PRIORITY 3: Over 1.5 Goals
     over_1_5_prob = over_goals.get("1.5", 0)
@@ -359,6 +382,145 @@ def get_recommendations_from_predictions(fixture_data):
             return recommendations
 
     return recommendations
+
+
+def check_qualified_win_consistency(fixture_data, is_home_favourite):
+    """
+    Check if the projected winner has demonstrated recent dominance at their venue.
+    Returns True if they have >= 2 qualified wins (GD >= 2) in their last venue-specific
+    matches from past_fixtures.
+    """
+    team_key = "home" if is_home_favourite else "away"
+    team = fixture_data.get(team_key, {})
+    team_name = team.get("team_name", "")
+    past_fixtures = team.get("past_fixtures", [])
+
+    venue_fixtures = []
+    for f in past_fixtures:
+        teams = f.get("teams", {})
+        scores = f.get("scores", {})
+        if is_home_favourite:
+            if teams.get("home") == team_name:
+                gf = int(scores.get("home") or 0)
+                ga = int(scores.get("away") or 0)
+                venue_fixtures.append((gf, ga))
+        else:
+            if teams.get("away") == team_name:
+                gf = int(scores.get("away") or 0)
+                ga = int(scores.get("home") or 0)
+                venue_fixtures.append((gf, ga))
+
+    if len(venue_fixtures) < 3:
+        return False  # Insufficient venue-specific data
+
+    qualified_wins = sum(1 for gf, ga in venue_fixtures[:5] if gf - ga >= 2)
+    return qualified_wins >= 2
+
+
+def get_adjusted_perf_threshold(fixture_data, is_home_favourite):
+    """
+    Return adjusted performance differential threshold based on the projected winner's
+    recent form across all competitions.
+    Standard: 0.40. Elevated to 0.48 on 3+ game winless streak, 0.55 on 4+.
+    """
+    team_key = "home" if is_home_favourite else "away"
+    team = fixture_data.get(team_key, {})
+    team_name = team.get("team_name", "")
+    past_fixtures = team.get("past_fixtures", [])
+
+    consecutive_without_win = 0
+    for f in past_fixtures[:5]:
+        teams = f.get("teams", {})
+        scores = f.get("scores", {})
+        if teams.get("home") == team_name:
+            gf = int(scores.get("home") or 0)
+            ga = int(scores.get("away") or 0)
+        else:
+            gf = int(scores.get("away") or 0)
+            ga = int(scores.get("home") or 0)
+        if gf > ga:
+            break
+        consecutive_without_win += 1
+
+    if consecutive_without_win >= 4:
+        return 0.55
+    elif consecutive_without_win >= 3:
+        return 0.48
+    else:
+        return 0.40
+
+
+_TYPICAL_SEASON_GAMES = 34  # Conservative estimate covering most European league formats
+
+
+def is_table_proximity_risk(fixture_data):
+    """
+    Returns True if this is a proximity pressure match where the points gap between
+    the two teams is within catching distance (gap_ratio < 0.5).
+    Computes league points from stored wins/draws and estimates remaining games.
+    """
+    home = fixture_data.get("home", {})
+    away = fixture_data.get("away", {})
+
+    home_total_wins = (home.get("home_wins") or 0) + (home.get("away_wins") or 0)
+    home_total_draws = (home.get("home_draws") or 0) + (home.get("away_draws") or 0)
+    away_total_wins = (away.get("home_wins") or 0) + (away.get("away_wins") or 0)
+    away_total_draws = (away.get("home_draws") or 0) + (away.get("away_draws") or 0)
+
+    home_points = home_total_wins * 3 + home_total_draws
+    away_points = away_total_wins * 3 + away_total_draws
+
+    home_games = home.get("total_games_played") or 0
+    away_games = away.get("total_games_played") or 0
+
+    if home_games == 0 or away_games == 0:
+        return False  # Can't assess, don't block
+
+    avg_games_played = (home_games + away_games) / 2
+    remaining_games = max(0, _TYPICAL_SEASON_GAMES - avg_games_played)
+
+    if remaining_games == 0:
+        return True  # Final-round fixture — maximum pressure, skip bet
+
+    points_gap = abs(home_points - away_points)
+    catchable_points = remaining_games * 3
+    gap_ratio = points_gap / catchable_points
+    return gap_ratio < 0.5
+
+
+def _get_min_variant_margin(fixture_data, home_is_favourite):
+    """
+    Returns the worst-case projected goal margin across all four model variants.
+    For a home favourite: min(home variant goals) - max(away variant goals).
+    For an away favourite: min(away variant goals) - max(home variant goals).
+    A value >= 1 means the favourite leads in every variant.
+    """
+    home = fixture_data.get("home", {})
+    away = fixture_data.get("away", {})
+
+    home_variants = [
+        float(home.get("predicted_goals") or 0),
+        float(home.get("predicted_goals_alt") or 0),
+        float(home.get("predicted_goals_venue") or 0),
+        float(home.get("predicted_goals_venue_alt") or 0),
+    ]
+    away_variants = [
+        float(away.get("predicted_goals") or 0),
+        float(away.get("predicted_goals_alt") or 0),
+        float(away.get("predicted_goals_venue") or 0),
+        float(away.get("predicted_goals_venue_alt") or 0),
+    ]
+
+    home_variants = [v for v in home_variants if v > 0]
+    away_variants = [v for v in away_variants if v > 0]
+
+    if not home_variants or not away_variants:
+        return 0  # Missing variant data — don't qualify
+
+    if home_is_favourite:
+        return min(home_variants) - max(away_variants)
+    else:
+        return min(away_variants) - max(home_variants)
 
 
 def analyze_score_predictions(top_scores, most_likely_score):
