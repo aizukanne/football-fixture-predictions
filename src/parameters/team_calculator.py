@@ -559,12 +559,11 @@ def calculate_segmented_params_by_opponent_strength(df, team_id, league_id, seas
     
     for _, match in df.iterrows():
         try:
-            # Determine season from match timestamp, not from league's current season
-            # This handles cases where historical matches are analyzed but team isn't in current season
-            match_date = pd.to_datetime(match['date'])  # Column name is 'date', not 'date_GMT'
-            match_season = str(match_date.year)
-            
-            # Get opponent tier from match perspective using the match's actual season
+            # Use the league season (e.g. "2025" for 2025/26), not match_date.year
+            # which would return "2026" for Jan+ matches and miss API standings data
+            match_season = str(season)
+
+            # Get opponent tier from match perspective using the league season
             opponent_tier = get_opponent_tier_from_match(
                 match['home_team_id'], match['away_team_id'],
                 league_id, match_season, team_id
@@ -886,9 +885,9 @@ def calculate_segmented_params_by_opponent_archetype(df, team_id, league_id, sea
 
     for _, match in df.iterrows():
         try:
-            # Determine season from match timestamp
+            # Use the league season, not match_date.year (which gives wrong year for cross-year seasons)
             match_date = pd.to_datetime(match['date'])
-            match_season = str(match_date.year)
+            match_season = str(season)
 
             # Classify opponent archetype
             opponent_archetype = get_opponent_archetype_from_match(
