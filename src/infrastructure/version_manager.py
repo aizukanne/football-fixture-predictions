@@ -22,7 +22,7 @@ import json
 import logging
 
 # Configuration
-CURRENT_ARCHITECTURE_VERSION = '6.0'
+CURRENT_ARCHITECTURE_VERSION = '7.0'
 
 ARCHITECTURE_FEATURES = {
     '1.0': {
@@ -48,6 +48,20 @@ ARCHITECTURE_FEATURES = {
         'adaptive_classification': True,
         'confidence_calibration': True,
         'description': 'Complete 6-phase advanced football prediction system'
+    },
+    '7.0': {
+        'segmentation': True,
+        'form_adjustment': True,
+        'tactical_features': True,
+        'opponent_stratification': True,
+        'venue_analysis': True,
+        'temporal_evolution': True,
+        'tactical_intelligence': True,
+        'adaptive_classification': True,
+        'confidence_calibration': True,
+        'opponent_aware_defense': True,
+        'additive_confidence': True,
+        'description': 'Opponent-aware defensive factor and additive confidence calibration'
     }
 }
 

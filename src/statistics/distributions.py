@@ -90,13 +90,9 @@ def calculate_goal_probabilities(lmbda, alpha=DEFAULT_ALPHA):
     Returns:
         Tuple of (most_likely_goals, probability_of_most_likely, all_probabilities_dict)
     """
-    # Apply an adjustment to lambda for better alignment with common football scores
-    if lmbda > 0.5:
-        # Slight boost for mid-to-high lambdas (conditional squashing provides main improvement)
-        adjusted_lmbda = lmbda * 1.05
-    else:
-        # No adjustment for very low lambdas
-        adjusted_lmbda = lmbda * 1
+    # No artificial lambda adjustment — the opponent-aware defensive factor
+    # in the lambda formula handles the balance correctly
+    adjusted_lmbda = lmbda
 
     # Calculate probabilities for goals 0-10 using the Negative Binomial
     probabilities = {}

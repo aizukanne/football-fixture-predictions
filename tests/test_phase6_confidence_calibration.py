@@ -163,6 +163,56 @@ def test_confidence_calibration():
         traceback.print_exc()
         return False
 
+def test_confidence_additive_penalty_spread():
+    """Test that confidence uses additive penalties with meaningful differentiation."""
+    print("\n Testing Confidence Additive Penalty Spread...")
+
+    try:
+        from src.analytics.confidence_calibrator import calculate_adaptive_confidence
+        from decimal import Decimal
+
+        # High-confidence scenario: predictable archetypes, good data
+        high_context = {
+            'home_archetype': 'possession_dominant',
+            'away_archetype': 'defensive_solid',
+            'match_importance': 'regular',
+            'data_completeness': 1.0,
+            'data_freshness': 1.0,
+            'historical_accuracy': 0.85,
+            'model_uncertainty': 0.1,
+        }
+        high_result = calculate_adaptive_confidence(Decimal('0.6'), high_context)
+
+        # Low-confidence scenario: unpredictable archetypes, poor data, cup final
+        low_context = {
+            'home_archetype': 'unpredictable',
+            'away_archetype': 'inconsistent',
+            'match_importance': 'cup_final',
+            'data_completeness': 0.5,
+            'data_freshness': 0.5,
+            'historical_accuracy': 0.50,
+            'model_uncertainty': 0.4,
+        }
+        low_result = calculate_adaptive_confidence(Decimal('0.6'), low_context)
+
+        high_conf = float(high_result['final_confidence'])
+        low_conf = float(low_result['final_confidence'])
+        spread = high_conf - low_conf
+
+        assert spread > 0.10, f"Confidence spread too narrow: {spread:.3f} (high={high_conf:.3f}, low={low_conf:.3f})"
+        assert high_conf > 0.40, f"High confidence too low: {high_conf:.3f}"
+        assert low_conf >= 0.10, f"Low confidence below floor: {low_conf:.3f}"
+
+        print(f"    High confidence: {high_conf:.3f}, Low confidence: {low_conf:.3f}, Spread: {spread:.3f}")
+        print("    Additive penalty spread test passed!")
+        return True
+
+    except Exception as e:
+        print(f"Additive penalty spread test failed: {e}")
+        traceback.print_exc()
+        return False
+
+
 def test_accuracy_tracking():
     """Test accuracy tracking functionality."""
     print("\n🧪 Testing Accuracy Tracking...")
@@ -371,7 +421,7 @@ def test_enhanced_prediction_engine():
         # Check prediction metadata for Phase 6 features
         metadata = prediction['prediction_metadata']
         assert 'architecture_version' in metadata
-        assert metadata['architecture_version'] == '6.0'
+        assert metadata['architecture_version'] == '7.0'
         assert 'confidence_calibrated' in metadata
         assert 'final_confidence' in metadata
         
@@ -414,7 +464,7 @@ def test_phase6_integration():
         prediction = generate_prediction_with_reporting(
             home_team_id=1, away_team_id=2, league_id=1, season=2024
         )
-        assert prediction['prediction_metadata']['architecture_version'] == '6.0'
+        assert prediction['prediction_metadata']['architecture_version'] == '7.0'
         print("    ✅ Step 1: Enhanced prediction generated")
         
         # Step 2: Track accuracy
@@ -457,6 +507,7 @@ def run_comprehensive_phase6_test():
     test_functions = [
         ("Phase 6 Imports", test_phase6_imports),
         ("Confidence Calibration", test_confidence_calibration),
+        ("Confidence Additive Penalty Spread", test_confidence_additive_penalty_spread),
         ("Accuracy Tracking", test_accuracy_tracking),
         ("Performance Dashboard", test_performance_dashboard),
         ("Executive Reporting", test_executive_reporting),

@@ -20,7 +20,7 @@ from ..statistics.distributions import calculate_goal_probabilities, squash_lamb
 from ..statistics.bayesian import apply_smoothing_to_team_data, apply_smoothing_to_binary_rate
 from ..utils.constants import DEFAULT_SMOOTHING_ALPHA
 from ..utils.converters import decimal_to_float
-from ..infrastructure.version_manager import VersionManager
+from ..infrastructure.version_manager import VersionManager, CURRENT_ARCHITECTURE_VERSION
 from ..infrastructure.transition_manager import TransitionManager
 from ..features.opponent_classifier import get_opponent_tier_from_match
 from ..features.venue_analyzer import VenueAnalyzer, calculate_stadium_advantage, calculate_travel_distance
@@ -260,14 +260,19 @@ def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id
         team2_games_cleanSheet_raw, team2_games_total, alpha_smooth, 1-score_prior, score_prior_weight, use_bayesian=True)
     
     if is_home:
-        lmbda = (team1_goals_scored * team2_goals_conceded * 
-                    team1_games_scored * 
-                    (1 - team2_games_cleanSheet))
+        # Opponent-aware clean sheet factor: strong attackers overcome defensive records
+        opponent_aware_cs = team2_games_cleanSheet * (1 - team1_games_scored)
+        defensive_factor = 1 - opponent_aware_cs
+        lmbda = (team1_goals_scored * team2_goals_conceded *
+                    team1_games_scored *
+                    defensive_factor)
     else:
-        lmbda = (team2_goals_scored * team1_goals_conceded * 
-                    team2_games_scored * 
-                    (1 - team1_games_cleanSheet))      
-    
+        opponent_aware_cs = team1_games_cleanSheet * (1 - team2_games_scored)
+        defensive_factor = 1 - opponent_aware_cs
+        lmbda = (team2_goals_scored * team1_goals_conceded *
+                    team2_games_scored *
+                    defensive_factor)
+
     print(f'Initial Lambda: {lmbda}')
 
     # Calculate shrinkage factor based on team's game count
@@ -376,15 +381,19 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
     team2_games_cleanSheet = apply_smoothing_to_binary_rate(
         team2_games_cleanSheet_raw, team2_games_total, alpha_smooth, 1-score_prior, score_prior_weight, use_bayesian=True)
     
-    # Calculate base lambda using the same formula as calculate_to_score
+    # Calculate base lambda with opponent-aware clean sheet factor
     if is_home:
-        base_lambda = (team1_goals_scored * team2_goals_conceded * 
-                      team1_games_scored * 
-                      (1 - team2_games_cleanSheet))
+        opponent_aware_cs = team2_games_cleanSheet * (1 - team1_games_scored)
+        defensive_factor = 1 - opponent_aware_cs
+        base_lambda = (team1_goals_scored * team2_goals_conceded *
+                      team1_games_scored *
+                      defensive_factor)
     else:
-        base_lambda = (team2_goals_scored * team1_goals_conceded * 
-                      team2_games_scored * 
-                      (1 - team1_games_cleanSheet))
+        opponent_aware_cs = team1_games_cleanSheet * (1 - team2_games_scored)
+        defensive_factor = 1 - opponent_aware_cs
+        base_lambda = (team2_goals_scored * team1_goals_conceded *
+                      team2_games_scored *
+                      defensive_factor)
     
     return base_lambda
 
@@ -755,7 +764,7 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
                 )
                 
                 # Apply confidence adjustments to lambda values (optional enhancement)
-                confidence_multiplier = float(adaptive_confidence['final_confidence']) / 0.8  # Normalize to 0.8 baseline
+                confidence_multiplier = float(adaptive_confidence['final_confidence']) / 0.45  # Normalize to typical additive-penalty confidence
                 confidence_multiplier = max(0.8, min(1.2, confidence_multiplier))  # Bound the multiplier
                 
                 # Store Phase 6 confidence analysis results
@@ -852,7 +861,7 @@ def calculate_coordinated_predictions(home_team_parameters, away_team_parameters
             "away_lambda_final": away_lambda_final,
             "ratio_correction": ratio_correction,
             # Phase 0 version tracking fields
-            "architecture_version": "6.0",  # Updated to Phase 6 complete system
+            "architecture_version": CURRENT_ARCHITECTURE_VERSION,
             "multiplier_source": effective_multipliers.get('source', 'unknown'),
             "multiplier_strategy": effective_multipliers.get('strategy', 'unknown'),
             "contamination_prevented": effective_multipliers.get('contamination_prevention', 'active'),
@@ -980,7 +989,7 @@ def generate_prediction_with_reporting(home_team_id, away_team_id, league_id, se
                 'reliability_assessment': 0.87
             },
             'metadata': {
-                'architecture_version': '6.0',
+                'architecture_version': CURRENT_ARCHITECTURE_VERSION,
                 'features': ['version_tracking', 'opponent_stratification', 'venue_analysis',
                            'temporal_evolution', 'tactical_intelligence', 'adaptive_classification',
                            'confidence_calibration'],
@@ -992,7 +1001,7 @@ def generate_prediction_with_reporting(home_team_id, away_team_id, league_id, se
                 'season': season
             },
             'prediction_metadata': {
-                'architecture_version': '6.0',
+                'architecture_version': CURRENT_ARCHITECTURE_VERSION,
                 'features': ['version_tracking', 'opponent_stratification', 'venue_analysis',
                            'temporal_evolution', 'tactical_intelligence', 'adaptive_classification',
                            'confidence_calibration'],
@@ -1043,7 +1052,7 @@ def generate_prediction_with_reporting(home_team_id, away_team_id, league_id, se
             'predictions': None,
             'confidence_analysis': None,
             'prediction_metadata': {
-                'architecture_version': '6.0',
+                'architecture_version': CURRENT_ARCHITECTURE_VERSION,
                 'error': 'Prediction generation failed'
             }
         }

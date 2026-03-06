@@ -234,12 +234,17 @@ class ConfidenceCalibrator:
             model_uncertainty_adj = self._calculate_model_uncertainty_adjustment(context_factors)
             adjustments['model_uncertainty'] = model_uncertainty_adj
             
-            # Apply adjustments multiplicatively (more conservative)
-            final_confidence = base_conf
+            # Apply adjustments as additive penalties (prevents over-compression)
+            # Each factor below 1.0 contributes a penalty proportional to its deficit
+            total_penalty = 0.0
             for factor, adjustment in adjustments.items():
-                final_confidence *= adjustment
-                if adjustment < 0.9:  # Significant reduction
+                penalty = max(0.0, 1.0 - adjustment)
+                total_penalty += penalty
+                if penalty > 0.10:  # Significant penalty (>10% deficit)
                     uncertainty_sources.append(factor)
+
+            # Scale total penalty to keep reductions meaningful but bounded
+            final_confidence = max(0.10, base_conf - total_penalty * 0.3)
             
             # Ensure confidence stays within bounds
             final_confidence = max(0.1, min(0.95, final_confidence))

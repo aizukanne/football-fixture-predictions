@@ -18,6 +18,7 @@ from ..data.database_client import (put_team_parameters, fetch_league_fixtures,
 from ..data.api_client import get_league_teams, get_league_start_date
 from ..utils.converters import convert_for_dynamodb
 from ..utils.constants import MINIMUM_GAMES_THRESHOLD
+from ..infrastructure.version_manager import CURRENT_ARCHITECTURE_VERSION
 from leagues import allLeagues
 
 
@@ -278,6 +279,12 @@ def process_single_league(league, force_recompute=False):
                 existing_params = get_team_params_from_db(team_id, league_id) or {}
                 prev_brier_ema = float(existing_params.get(
                     'brier_ema', existing_params.get('brier', 0.25)))
+
+                # Reset Brier EMA when architecture version changes (formula recalibration)
+                existing_version = existing_params.get('architecture_version', '6.0')
+                if existing_version != CURRENT_ARCHITECTURE_VERSION:
+                    prev_brier_ema = 0.25
+                    print(f"Brier EMA reset for {team_name}: version change {existing_version} -> {CURRENT_ARCHITECTURE_VERSION}")
 
                 # Tune weights if we have enough data
                 if not team_dict.get('using_league_params', True) and team_games > MINIMUM_GAMES_THRESHOLD:

@@ -44,7 +44,7 @@ def test_complete_system_integration():
         'performance_metrics': {},
         'production_readiness': {},
         'test_timestamp': datetime.now().isoformat(),
-        'system_version': '6.0'
+        'system_version': '7.0'
     }
     
     try:
@@ -147,7 +147,7 @@ def test_version_tracking_integration() -> dict:
         # Test contamination prevention by attempting to calculate multipliers
         test_multipliers = calculate_multipliers(
             team_id=1, league_id=39, season=2023, 
-            version_metadata={'architecture_version': '6.0'}
+            version_metadata={'architecture_version': '7.0'}
         )
         
         # Verify multipliers have proper structure
@@ -329,7 +329,7 @@ def test_confidence_calibration_integration() -> dict:
         mock_prediction = {
             'home_team': {'score_probability': 0.65},
             'away_team': {'score_probability': 0.45},
-            'prediction_metadata': {'architecture_version': '6.0'}
+            'prediction_metadata': {'architecture_version': '7.0'}
         }
         
         calibrated_confidence = calibrate_prediction_confidence(
@@ -473,10 +473,10 @@ def validate_production_readiness() -> dict:
             from src.infrastructure.version_manager import VersionManager
             vm = VersionManager()
             version = vm.get_current_version()
-            if version and str(version).startswith('6'):
+            if version and str(version).startswith('7'):
                 readiness_checks['version_consistency'] = 'PASS'
             else:
-                readiness_checks['version_consistency'] = f'FAIL: Version {version} not 6.x'
+                readiness_checks['version_consistency'] = f'FAIL: Version {version} not 7.x'
         except Exception as e:
             readiness_checks['version_consistency'] = f'FAIL: {e}'
         

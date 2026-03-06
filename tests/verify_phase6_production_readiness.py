@@ -101,7 +101,7 @@ def validate_enhanced_prediction_engine():
         
         # Validate Phase 6 enhancements
         metadata = prediction['prediction_metadata']
-        assert metadata.get('architecture_version') == '6.0', "Incorrect version"
+        assert metadata.get('architecture_version') == '7.0', "Incorrect version"
         assert metadata.get('confidence_calibrated') == True, "Confidence not calibrated"
         assert 'final_confidence' in metadata, "Missing final confidence"
         
@@ -436,7 +436,7 @@ def generate_final_system_report():
         print("\n🎯 SAMPLE PREDICTION DEMONSTRATION:")
         prediction = generate_prediction_with_reporting(1, 2, 1, 2024, include_insights=True)
         
-        if prediction.get('prediction_metadata', {}).get('architecture_version') == '6.0':
+        if prediction.get('prediction_metadata', {}).get('architecture_version') == '7.0':
             print("    ✅ Phase 6 Enhanced Prediction Generated Successfully")
             print(f"    📊 Architecture Version: {prediction['prediction_metadata']['architecture_version']}")
             print(f"    🎯 Confidence Calibrated: {prediction['prediction_metadata']['confidence_calibrated']}")
