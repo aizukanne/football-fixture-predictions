@@ -275,6 +275,15 @@ def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id
                     team2_games_scored *
                     defensive_factor)
 
+    # League-anchored lambda: use raw formula as relative strength index
+    # anchored to actual league goal rates so predictions match reality
+    league_avg = float(goal_prior)  # mu_home or mu_away
+    avg_cs = 1 - score_prior
+    avg_def = 0.6 * score_prior + 0.4 * (1 - avg_cs * (1 - score_prior))
+    avg_raw_lambda = goal_prior * goal_prior * score_prior * avg_def
+    if avg_raw_lambda > 0:
+        lmbda = league_avg * (lmbda / avg_raw_lambda)
+
     print(f'Initial Lambda: {lmbda}')
 
     # Calculate shrinkage factor based on team's game count
@@ -398,7 +407,15 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
         base_lambda = (team2_goals_scored * team1_goals_conceded *
                       team2_games_scored *
                       defensive_factor)
-    
+
+    # League-anchored: scale raw lambda relative to league average goal rate
+    league_avg = float(goal_prior)
+    avg_cs = 1 - score_prior
+    avg_def = 0.6 * score_prior + 0.4 * (1 - avg_cs * (1 - score_prior))
+    avg_raw_lambda = goal_prior * goal_prior * score_prior * avg_def
+    if avg_raw_lambda > 0:
+        base_lambda = league_avg * (base_lambda / avg_raw_lambda)
+
     return base_lambda
 
 
