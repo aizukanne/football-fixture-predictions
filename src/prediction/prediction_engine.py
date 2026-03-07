@@ -260,15 +260,17 @@ def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id
         team2_games_cleanSheet_raw, team2_games_total, alpha_smooth, 1-score_prior, score_prior_weight, use_bayesian=True)
     
     if is_home:
-        # Opponent-aware clean sheet factor: strong attackers overcome defensive records
-        opponent_aware_cs = team2_games_cleanSheet * (1 - team1_games_scored)
-        defensive_factor = 1 - opponent_aware_cs
+        # Blended defensive factor: 60% original signal + 40% opponent-aware
+        original_factor = 1 - team2_games_cleanSheet
+        opponent_aware_factor = 1 - team2_games_cleanSheet * (1 - team1_games_scored)
+        defensive_factor = 0.6 * original_factor + 0.4 * opponent_aware_factor
         lmbda = (team1_goals_scored * team2_goals_conceded *
                     team1_games_scored *
                     defensive_factor)
     else:
-        opponent_aware_cs = team1_games_cleanSheet * (1 - team2_games_scored)
-        defensive_factor = 1 - opponent_aware_cs
+        original_factor = 1 - team1_games_cleanSheet
+        opponent_aware_factor = 1 - team1_games_cleanSheet * (1 - team2_games_scored)
+        defensive_factor = 0.6 * original_factor + 0.4 * opponent_aware_factor
         lmbda = (team2_goals_scored * team1_goals_conceded *
                     team2_games_scored *
                     defensive_factor)
@@ -381,16 +383,18 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
     team2_games_cleanSheet = apply_smoothing_to_binary_rate(
         team2_games_cleanSheet_raw, team2_games_total, alpha_smooth, 1-score_prior, score_prior_weight, use_bayesian=True)
     
-    # Calculate base lambda with opponent-aware clean sheet factor
+    # Blended defensive factor: 60% original signal + 40% opponent-aware
     if is_home:
-        opponent_aware_cs = team2_games_cleanSheet * (1 - team1_games_scored)
-        defensive_factor = 1 - opponent_aware_cs
+        original_factor = 1 - team2_games_cleanSheet
+        opponent_aware_factor = 1 - team2_games_cleanSheet * (1 - team1_games_scored)
+        defensive_factor = 0.6 * original_factor + 0.4 * opponent_aware_factor
         base_lambda = (team1_goals_scored * team2_goals_conceded *
                       team1_games_scored *
                       defensive_factor)
     else:
-        opponent_aware_cs = team1_games_cleanSheet * (1 - team2_games_scored)
-        defensive_factor = 1 - opponent_aware_cs
+        original_factor = 1 - team1_games_cleanSheet
+        opponent_aware_factor = 1 - team1_games_cleanSheet * (1 - team2_games_scored)
+        defensive_factor = 0.6 * original_factor + 0.4 * opponent_aware_factor
         base_lambda = (team2_goals_scored * team1_goals_conceded *
                       team2_games_scored *
                       defensive_factor)
