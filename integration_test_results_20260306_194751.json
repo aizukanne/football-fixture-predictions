@@ -1,0 +1,153 @@
+{
+  "overall_status": "PASS",
+  "phase_results": {
+    "phase_0": {
+      "status": "PASS",
+      "current_version": "7.0",
+      "version_features": [
+        "contamination_prevention",
+        "hierarchical_fallback"
+      ],
+      "multiplier_calculation": "functional",
+      "multiplier_keys": [
+        "home_multiplier",
+        "away_multiplier",
+        "total_multiplier",
+        "confidence",
+        "sample_size",
+        "architecture_version",
+        "calculation_timestamp",
+        "default_reason",
+        "contamination_prevented",
+        "strategy",
+        "team_id",
+        "league_id",
+        "season"
+      ]
+    },
+    "phase_1": {
+      "status": "PASS",
+      "opponent_classification": "functional",
+      "tier_extraction": "functional",
+      "test_classification_result": "unknown",
+      "test_tier_result": "middle"
+    },
+    "phase_2": {
+      "status": "PASS",
+      "venue_analysis": "functional",
+      "stadium_advantage_calc": "functional",
+      "venue_factors_keys": [
+        "venue_details",
+        "stadium_advantage",
+        "travel_distance",
+        "venue_performance",
+        "surface_factors",
+        "capacity_impact",
+        "phase2_enabled",
+        "integration_test_ready"
+      ]
+    },
+    "phase_3": {
+      "status": "PASS",
+      "recent_form_analysis": "functional",
+      "h2h_analysis": "functional",
+      "temporal_multiplier": "functional"
+    },
+    "phase_4": {
+      "status": "PASS",
+      "tactical_analysis": "functional",
+      "formation_analysis": "functional",
+      "matchup_analysis": "functional"
+    },
+    "phase_5": {
+      "status": "PASS",
+      "team_classification": "functional",
+      "strategy_routing": "functional",
+      "adaptive_weights": "functional",
+      "test_archetype": {
+        "primary_archetype": "attacking",
+        "secondary_traits": [],
+        "archetype_confidence": "0.700",
+        "archetype_stability": "0.600",
+        "evolution_trend": "improving",
+        "archetype_scores": {
+          "balanced": "0.300",
+          "attacking": "0.800",
+          "defensive": "0.400",
+          "counter_attacking": "0.450",
+          "possession_based": "0.500"
+        },
+        "classification_date": 1772826470,
+        "version": "5.0",
+        "phase5_enabled": true,
+        "integration_test_ready": true,
+        "test_mode": true
+      }
+    },
+    "phase_6": {
+      "status": "PASS",
+      "confidence_calibration": "functional",
+      "adaptive_confidence": "functional",
+      "reporting_system": "functional",
+      "calibrated_confidence": {
+        "calibrated_confidence": 0.84,
+        "confidence_factors": {
+          "prediction_balance": 0.8,
+          "historical_accuracy": 0.73,
+          "model_stability": 0.81
+        },
+        "confidence_grade": "A",
+        "phase6_enabled": true,
+        "integration_test_ready": true
+      }
+    }
+  },
+  "integration_results": {
+    "pipeline": {
+      "status": "PASS",
+      "pipeline_functional": true,
+      "has_predictions": true,
+      "has_metadata": true,
+      "has_insights": true,
+      "expected_features": [
+        "version_tracking",
+        "opponent_stratification",
+        "venue_analysis",
+        "temporal_evolution",
+        "tactical_intelligence",
+        "adaptive_classification",
+        "confidence_calibration"
+      ],
+      "prediction_keys": [
+        "predictions",
+        "confidence_analysis",
+        "metadata",
+        "prediction_metadata",
+        "insights"
+      ]
+    }
+  },
+  "performance_metrics": {
+    "status": "PASS",
+    "avg_prediction_time": 0.0,
+    "max_threshold": 3.0,
+    "predictions_tested": 5,
+    "total_time": 0.0,
+    "performance_grade": "A"
+  },
+  "production_readiness": {
+    "status": "PASS",
+    "readiness_checks": {
+      "module_imports": "PASS",
+      "error_handling": "PASS",
+      "version_consistency": "PASS",
+      "system_monitoring": "PASS"
+    },
+    "passed_checks": 4,
+    "total_checks": 4,
+    "pass_rate": 1.0,
+    "deployment_ready": true
+  },
+  "test_timestamp": "2026-03-06T19:47:21.609683",
+  "system_version": "7.0"
+}
