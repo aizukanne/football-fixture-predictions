@@ -305,24 +305,28 @@ def fetch_league_fixtures(country, league_name, start_time, end_time):
         List of fixture records
     """
     try:
-        # Use GSI to query by country and league (much more efficient than scan)
+        # Use GSI to query by country and league (much more efficient than scan).
+        # prediction_metadata is required by multiplier_calculator's version
+        # filter — without it, the filter falls back to nested coordination_info
+        # fields and silently drops fixtures stamped with a newer version only
+        # in prediction_metadata.
         response = webFE_table.query(
             IndexName='country-league-index',
             KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
             FilterExpression=Key('timestamp').between(start_time, end_time),
-            ProjectionExpression='fixture_id, home, away, goals, predictions, coordination_info, #date, #timestamp',
+            ProjectionExpression='fixture_id, home, away, goals, predictions, coordination_info, prediction_metadata, #date, #timestamp',
             ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'}
         )
-        
+
         items = response.get('Items', [])
-        
+
         # Handle pagination if needed
         while 'LastEvaluatedKey' in response:
             response = webFE_table.query(
                 IndexName='country-league-index',
                 KeyConditionExpression=Key('country').eq(country) & Key('league').eq(league_name),
                 FilterExpression=Key('timestamp').between(start_time, end_time),
-                ProjectionExpression='fixture_id, home, away, goals, predictions, coordination_info, #date, #timestamp',
+                ProjectionExpression='fixture_id, home, away, goals, predictions, coordination_info, prediction_metadata, #date, #timestamp',
                 ExpressionAttributeNames={'#date': 'date', '#timestamp': 'timestamp'},
                 ExclusiveStartKey=response['LastEvaluatedKey']
             )
