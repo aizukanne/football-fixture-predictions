@@ -276,11 +276,17 @@ def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id
                     defensive_factor)
 
     # League-anchored lambda: use raw formula as relative strength index
-    # anchored to actual league goal rates so predictions match reality
+    # anchored to actual league goal rates so predictions match reality.
+    # Denominator uses cross-venue centers (mu_bar, p_bar) because the raw
+    # factors (team_goals_scored, opp_goals_conceded, games_scored) are
+    # cross-venue stats; using the home- or away-biased priors there
+    # produced ~20% home-side compression and ~13% away-side inflation.
     league_avg = float(goal_prior)  # mu_home or mu_away
-    avg_cs = 1 - score_prior
-    avg_def = 0.6 * score_prior + 0.4 * (1 - avg_cs * (1 - score_prior))
-    avg_raw_lambda = goal_prior * goal_prior * score_prior * avg_def
+    mu_bar = 0.5 * (float(params['mu_home']) + float(params['mu_away']))
+    p_bar = 0.5 * (float(params['p_score_home']) + float(params['p_score_away']))
+    avg_cs = 1 - p_bar
+    avg_def = 0.6 * p_bar + 0.4 * (1 - avg_cs * (1 - p_bar))
+    avg_raw_lambda = mu_bar * mu_bar * p_bar * avg_def
     if avg_raw_lambda > 0:
         lmbda = league_avg * (lmbda / avg_raw_lambda)
 
@@ -294,11 +300,13 @@ def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id
     # Store original lambda for reporting
     lmbda_original = lmbda
 
-    # Home advantage adjustment
-    if is_home:
-        lmbda *= league_home_adv
-    else:
-        lmbda *= 1/league_home_adv
+    # Home advantage is already encoded in the league anchor, which uses
+    # mu_home (home) or mu_away (away) as the numerator. Applying home_adv
+    # here would double-count it, inflating home λ by (mu_home/mu_away)
+    # and deflating away λ by the same factor — the source of the ~1.70×
+    # away-side asymmetry observed in the v7 sweep. Left as a no-op to
+    # preserve the `league_home_adv = 1.0` contract set by skip_home_adv
+    # for the venue_predictions path.
 
     # Apply smart correction with multipliers
     multiplier_float = float(multiplier)
@@ -408,11 +416,15 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
                       team2_games_scored *
                       defensive_factor)
 
-    # League-anchored: scale raw lambda relative to league average goal rate
+    # League-anchored: scale raw lambda relative to league average goal rate.
+    # Denominator uses cross-venue centers to match the actual centers of the
+    # raw factors (see calculate_to_score for the rationale).
     league_avg = float(goal_prior)
-    avg_cs = 1 - score_prior
-    avg_def = 0.6 * score_prior + 0.4 * (1 - avg_cs * (1 - score_prior))
-    avg_raw_lambda = goal_prior * goal_prior * score_prior * avg_def
+    mu_bar = 0.5 * (float(params['mu_home']) + float(params['mu_away']))
+    p_bar = 0.5 * (float(params['p_score_home']) + float(params['p_score_away']))
+    avg_cs = 1 - p_bar
+    avg_def = 0.6 * p_bar + 0.4 * (1 - avg_cs * (1 - p_bar))
+    avg_raw_lambda = mu_bar * mu_bar * p_bar * avg_def
     if avg_raw_lambda > 0:
         base_lambda = league_avg * (base_lambda / avg_raw_lambda)
 

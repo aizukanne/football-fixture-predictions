@@ -421,7 +421,7 @@ def test_enhanced_prediction_engine():
         # Check prediction metadata for Phase 6 features
         metadata = prediction['prediction_metadata']
         assert 'architecture_version' in metadata
-        assert metadata['architecture_version'] == '7.0'
+        assert metadata['architecture_version'] == '8.0'
         assert 'confidence_calibrated' in metadata
         assert 'final_confidence' in metadata
         
@@ -464,7 +464,7 @@ def test_phase6_integration():
         prediction = generate_prediction_with_reporting(
             home_team_id=1, away_team_id=2, league_id=1, season=2024
         )
-        assert prediction['prediction_metadata']['architecture_version'] == '7.0'
+        assert prediction['prediction_metadata']['architecture_version'] == '8.0'
         print("    ✅ Step 1: Enhanced prediction generated")
         
         # Step 2: Track accuracy

@@ -22,7 +22,7 @@ import json
 import logging
 
 # Configuration
-CURRENT_ARCHITECTURE_VERSION = '7.0'
+CURRENT_ARCHITECTURE_VERSION = '8.0'
 
 ARCHITECTURE_FEATURES = {
     '1.0': {
@@ -62,6 +62,23 @@ ARCHITECTURE_FEATURES = {
         'opponent_aware_defense': True,
         'additive_confidence': True,
         'description': 'Opponent-aware defensive factor and additive confidence calibration'
+    },
+    '8.0': {
+        'segmentation': True,
+        'form_adjustment': True,
+        'tactical_features': True,
+        'opponent_stratification': True,
+        'venue_analysis': True,
+        'temporal_evolution': True,
+        'tactical_intelligence': True,
+        'adaptive_classification': True,
+        'confidence_calibration': True,
+        'opponent_aware_defense': True,
+        'additive_confidence': True,
+        'symmetric_league_anchor': True,
+        'home_adv_deduplication': True,
+        'post_anchor_scale_correction': True,
+        'description': 'Symmetric league anchor (mu_bar/p_bar denominator), home_adv deduplication, and 1.35 post-anchor scale correction'
     }
 }
 

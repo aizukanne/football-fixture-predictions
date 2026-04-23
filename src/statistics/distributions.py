@@ -90,9 +90,14 @@ def calculate_goal_probabilities(lmbda, alpha=DEFAULT_ALPHA):
     Returns:
         Tuple of (most_likely_goals, probability_of_most_likely, all_probabilities_dict)
     """
-    # No artificial lambda adjustment — the opponent-aware defensive factor
-    # in the lambda formula handles the balance correctly
-    adjusted_lmbda = lmbda
+    # Post-anchor scale correction. With the league-anchor using cross-venue
+    # factor centers (mu_bar, p_bar) and the double-counted home_adv
+    # multiplier removed from the λ pipeline, both home and away sides are
+    # compressed by a symmetric ~26% residual from Bayesian smoothing /
+    # confidence calibration. Empirical sweep on 2,953 v7 fixtures finds
+    # 1.35 nearly zeroes home and away bias simultaneously (home +0.003,
+    # away -0.058) at MAE 1.399 / RMSE 1.773.
+    adjusted_lmbda = lmbda * 1.35
 
     # Calculate probabilities for goals 0-10 using the Negative Binomial
     probabilities = {}
