@@ -118,6 +118,7 @@ Desktop.ini
 
 # Project Specific
 # Add any project-specific files that should not be version controlled
+data/fixture_stats/
 
 # Keep README and basic documentation
 !README.md

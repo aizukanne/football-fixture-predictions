@@ -7,12 +7,17 @@ Supports both basic score updates and enhanced match statistics collection.
 import json
 from datetime import datetime, timedelta
 
-from ..data.api_client import get_fixtures_goals_by_ids, get_league_start_date
+from ..data.api_client import (
+    get_fixtures_goals_by_ids,
+    get_league_start_date,
+    get_fixture_statistics,
+)
 from ..data.database_client import (
     query_dynamodb_records,
     add_attribute_to_dynamodb_item,
     update_fixture_scores
 )
+from ..data.match_statistics import FixtureMeta, write_fixture_statistics
 from ..utils.converters import decimal_default
 from leagues import allLeagues
 
@@ -170,9 +175,15 @@ def process_league_fixtures(league_id, league_name, country, goals_dict, db_reco
                         if halftime_home is not None and halftime_away is not None:
                             print(f"  Halftime: {halftime_home}-{halftime_away}")
 
-                        # Collect additional match data if enabled
-                        enhanced_data = collect_enhanced_match_data(fixture_id, goal_data)
-                        if enhanced_data:
+                        # Collect per-team match statistics for V2 xG engine.
+                        # This writes to football_match_statistics_prod and
+                        # has no effect on the V1 game_fixtures record.
+                        enhanced_data = collect_enhanced_match_data(
+                            fixture_id, goal_data, db_record=db_record
+                        )
+                        if enhanced_data and enhanced_data.get('match_statistics'):
+                            # Preserve the legacy match_statistics attribute on the
+                            # game_fixtures item for backward-compatible consumers.
                             update_enhanced_match_data(fixture_id, enhanced_data)
 
                         updated_count += 1
@@ -226,49 +237,166 @@ def process_league_fixtures(league_id, league_name, country, goals_dict, db_reco
     }
 
 
-def collect_enhanced_match_data(fixture_id, goal_data):
+def _extract_fixture_meta(fixture_id, db_record):
+    """Pull the (league_id, season, date, home_team_id, away_team_id) tuple
+    from a game_fixtures DynamoDB record so we can build a FixtureMeta.
+
+    Returns None if any required field is missing.
     """
-    Collect enhanced match statistics beyond basic scores.
-    This supports the enhanced data collection for Phase 4+ tactical analysis.
+    if not db_record:
+        return None
+    try:
+        league_id = db_record.get('league_id')
+        season = db_record.get('season')
+        match_date = db_record.get('date')
+        home = db_record.get('home') or {}
+        away = db_record.get('away') or {}
+        home_team_id = home.get('team_id')
+        away_team_id = away.get('team_id')
+
+        if None in (league_id, season, match_date, home_team_id, away_team_id):
+            return None
+
+        return FixtureMeta(
+            league_id=int(league_id),
+            season=int(season),
+            match_date=str(match_date),
+            home_team_id=int(home_team_id),
+            away_team_id=int(away_team_id),
+        )
+    except (TypeError, ValueError, KeyError) as e:
+        print(f"Could not build FixtureMeta for fixture {fixture_id}: {e}")
+        return None
+
+
+def collect_enhanced_match_data(fixture_id, goal_data, db_record=None):
+    """Fetch per-team match statistics for a finished fixture and persist them.
+
+    Called from process_league_fixtures immediately after the goal update.
+    Writes to football_match_statistics_prod. Does NOT modify the
+    game_fixtures record directly — that's still done by
+    update_enhanced_match_data() using the summary dict we return.
 
     Args:
-        fixture_id: Fixture identifier
-        goal_data: Goal data dictionary from API (contains home, away, halftime scores, status)
+        fixture_id: Fixture identifier.
+        goal_data: Goal dict from the /fixtures endpoint (home, away,
+            halftime_*, status). Used for the legacy match_statistics
+            attribute written to game_fixtures.
+        db_record: The existing game_fixtures item for this fixture, used
+            to derive league/team/season context. If missing, we skip the
+            V2 stats write (no way to key the match_statistics item
+            correctly without it) but still return a legacy summary so
+            V1 handling remains intact.
 
     Returns:
-        Dictionary with enhanced match data or None if not available
+        dict with keys:
+            'match_statistics' — legacy nested shape for the V1 attribute,
+            'v2_stats_ingestion' — { items_written, xg_sources, skipped },
+            'collected_at' — unix timestamp.
+        Or None only on unexpected errors (never on a quiet API miss).
     """
     try:
-        # For now, we only have basic goal data from the get_fixtures_goals function
-        # Enhanced statistics would require additional API calls to the /fixtures/statistics endpoint
+        api_response = get_fixture_statistics(fixture_id)
+        teams = (api_response or {}).get('response') or []
 
-        # Build minimal enhanced data structure with what we have
+        # Build legacy-shape nested summary from the API response (for the
+        # existing game_fixtures.match_statistics attribute, which some
+        # downstream consumers may still read).
+        legacy_stats = _build_legacy_stats_shape(teams, db_record)
+
         enhanced_data = {
-            'match_statistics': {
-                'shots': {'home': None, 'away': None},
-                'shots_on_target': {'home': None, 'away': None},
-                'possession': {'home': None, 'away': None},
-                'passes': {'home': None, 'away': None},
-                'pass_accuracy': {'home': None, 'away': None},
-                'corners': {'home': None, 'away': None},
-                'fouls': {'home': None, 'away': None},
-                'yellow_cards': {'home': None, 'away': None},
-                'red_cards': {'home': None, 'away': None}
-            },
-            'collected_at': int(datetime.now().timestamp())
+            'match_statistics': legacy_stats,
+            'collected_at': int(datetime.now().timestamp()),
         }
 
-        # In a full implementation, this would make additional API calls to:
-        # 1. Get detailed match statistics from /fixtures/statistics endpoint
-        # 2. Get player statistics if needed
-        # 3. Get formation and tactical data
-        # For now, return None since we don't have enhanced stats yet
+        # V2 ingestion: write 18-field per-team rows to match_statistics.
+        fixture_meta = _extract_fixture_meta(fixture_id, db_record)
+        if fixture_meta is None:
+            print(f"V2 stats skipped for fixture {fixture_id}: no FixtureMeta")
+            enhanced_data['v2_stats_ingestion'] = {
+                'items_written': 0,
+                'skipped': True,
+                'reason': 'no_fixture_meta',
+            }
+        elif not teams:
+            print(f"V2 stats: API returned no team entries for fixture {fixture_id}")
+            enhanced_data['v2_stats_ingestion'] = {
+                'items_written': 0,
+                'skipped': True,
+                'reason': 'empty_api_response',
+            }
+        else:
+            result = write_fixture_statistics(fixture_id, fixture_meta, api_response)
+            enhanced_data['v2_stats_ingestion'] = result
+            print(
+                f"V2 stats: fixture {fixture_id} wrote {result['items_written']} items "
+                f"(sources={result['xg_sources']})"
+            )
 
-        return None
+        return enhanced_data
 
     except Exception as e:
         print(f"Error collecting enhanced data for fixture {fixture_id}: {e}")
         return None
+
+
+def _build_legacy_stats_shape(team_entries, db_record):
+    """Project the flat 18-field per-team stats into the legacy nested
+    {stat_name: {'home': X, 'away': Y}} shape that V1-era consumers expect.
+
+    Uses db_record to identify which entry is 'home' vs 'away' — not the
+    API payload order, which isn't guaranteed.
+    """
+    shape = {
+        'shots': {'home': None, 'away': None},
+        'shots_on_target': {'home': None, 'away': None},
+        'possession': {'home': None, 'away': None},
+        'passes': {'home': None, 'away': None},
+        'pass_accuracy': {'home': None, 'away': None},
+        'corners': {'home': None, 'away': None},
+        'fouls': {'home': None, 'away': None},
+        'yellow_cards': {'home': None, 'away': None},
+        'red_cards': {'home': None, 'away': None},
+    }
+
+    if not team_entries or not db_record:
+        return shape
+
+    home_team_id = (db_record.get('home') or {}).get('team_id')
+    if home_team_id is None:
+        return shape
+
+    try:
+        home_id = int(home_team_id)
+    except (TypeError, ValueError):
+        return shape
+
+    api_to_legacy = {
+        'Total Shots':      'shots',
+        'Shots on Goal':    'shots_on_target',
+        'Ball Possession':  'possession',
+        'Total passes':     'passes',
+        'Passes %':         'pass_accuracy',
+        'Corner Kicks':     'corners',
+        'Fouls':            'fouls',
+        'Yellow Cards':     'yellow_cards',
+        'Red Cards':        'red_cards',
+    }
+
+    for entry in team_entries:
+        team = entry.get('team') or {}
+        tid = team.get('id')
+        if tid is None:
+            continue
+        side = 'home' if int(tid) == home_id else 'away'
+        for stat in entry.get('statistics') or []:
+            api_type = stat.get('type')
+            legacy_key = api_to_legacy.get(api_type)
+            if legacy_key is None:
+                continue
+            shape[legacy_key][side] = stat.get('value')
+
+    return shape
 
 
 def update_enhanced_match_data(fixture_id, enhanced_data):

@@ -84,6 +84,21 @@ GAME_FIXTURES_TABLE = _get_table_name('game_fixtures')
 LEAGUE_PARAMETERS_TABLE = _get_table_name('league_parameters')
 TEAM_PARAMETERS_TABLE = _get_table_name('team_parameters')
 
+# V2 xG-engine table names
+MATCH_STATISTICS_TABLE = _get_table_name('match_statistics')
+TEAM_XG_PARAMETERS_TABLE = _get_table_name('team_xg_parameters')
+LEAGUE_XG_PARAMETERS_TABLE = _get_table_name('league_xg_parameters')
+
+# V2 engine constants
+SOT_TO_XG_FACTOR = 0.32          # from Phase 1 analysis: global SoT->goals conversion ≈ 0.317
+XG_FORM_DECAY = 0.9              # per-match decay weight (inherits V1's form_analyzer)
+XG_SHRINKAGE_K = 10              # league-mean prior weight for small-N teams
+XG_MIN_MATCHES_FULL = 10         # below this, 'sparse' data_quality flag
+XG_BURN_IN_MATCHES = 10          # minimum history before V2 emits predictions
+XG_DEFAULT_RHO_DC = -0.18        # Dixon-Coles rho initial value (re-fit per league after 4wk)
+XG_FORM_MULT_MIN = 0.7           # clamp bounds on form multiplier
+XG_FORM_MULT_MAX = 1.3
+
 # SQS Queue URLs
 # Default queue URL - will be updated by infrastructure setup script
 # Or set via environment variable for different environments

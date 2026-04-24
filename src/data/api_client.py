@@ -563,6 +563,36 @@ def get_team_statistics(league_id, season, team_id, max_retries=DEFAULT_MAX_RETR
     return data
 
 
+@cached
+def get_fixture_statistics(fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+    """
+    Get per-team match statistics for a single fixture.
+
+    Returns the 18 stat types per team defined by the API-Football
+    /fixtures/statistics endpoint: shots on/off/blocked/inside-box/outside-box,
+    total shots, fouls, corners, offsides, ball possession, yellow/red cards,
+    goalkeeper saves, total/accurate passes, pass accuracy, expected_goals, and
+    goals_prevented.
+
+    Args:
+        fixture_id: Fixture identifier (must be a completed match for populated stats).
+        max_retries: Maximum retry attempts.
+
+    Returns:
+        API response dict. The caller should check `response` for team entries;
+        an empty list means the API has no stats coverage for this fixture
+        (common for qualifying-round matches in continental competitions or
+        lower divisions lacking the statistics_fixtures coverage flag).
+    """
+    url = f"{API_FOOTBALL_BASE_URL}/fixtures/statistics"
+    params = {"fixture": str(fixture_id)}
+
+    data = _make_api_request(url, params, max_retries=max_retries)
+    if not data:
+        return {"response": []}
+    return data
+
+
 def get_fixture_events(fixture_id, max_retries=DEFAULT_MAX_RETRIES):
     """
     Get all events (goals, cards, substitutions) for a specific fixture.
@@ -1344,6 +1374,9 @@ class APIClient:
 
     def get_fixture_events(self, fixture_id, max_retries=DEFAULT_MAX_RETRIES):
         return get_fixture_events(fixture_id, max_retries)
+
+    def get_fixture_statistics(self, fixture_id, max_retries=DEFAULT_MAX_RETRIES):
+        return get_fixture_statistics(fixture_id, max_retries)
 
     def get_league_teams(self, league_id, season, max_retries=DEFAULT_MAX_RETRIES):
         return get_league_teams(league_id, season, max_retries)
