@@ -49,6 +49,65 @@ class DataFormatter:
             'last_evaluated_key': query_result.get('last_evaluated_key')
         }
 
+    def _resolve_score_components(self, item: Dict) -> Dict[str, Optional[int]]:
+        """Pick predicted_goals (V2/xG) and predicted_goals_alt (V1) from
+        the most-likely joint score in each engine's summary.
+
+        Falls back to the per-team attributes (xg_predicted_goals,
+        predicted_goals) if the summary structure is missing — that keeps
+        the response usable on records produced before V2 was deployed.
+
+        Returns a dict with home_primary, away_primary, home_alt, away_alt.
+        """
+        def _parse_score_str(s: Any) -> tuple[Optional[int], Optional[int]]:
+            if not isinstance(s, str) or '-' not in s:
+                return None, None
+            parts = s.split('-', 1)
+            try:
+                return int(parts[0].strip()), int(parts[1].strip())
+            except (ValueError, AttributeError):
+                return None, None
+
+        def _from_summary(summary: Any) -> tuple[Optional[int], Optional[int]]:
+            """Try most_likely_score.score, then top_scores[0].score."""
+            if not isinstance(summary, dict):
+                return None, None
+            mls = summary.get('most_likely_score')
+            if isinstance(mls, dict):
+                h, a = _parse_score_str(mls.get('score'))
+                if h is not None:
+                    return h, a
+            top = summary.get('top_scores')
+            if isinstance(top, list) and top:
+                first = top[0]
+                if isinstance(first, dict):
+                    return _parse_score_str(first.get('score'))
+            return None, None
+
+        # Primary = V2 (xG)
+        h_pri, a_pri = _from_summary(item.get('xg_predictions'))
+        if h_pri is None:
+            # Fall back to per-team xg_predicted_goals (still V2-derived)
+            home_data = item.get('home', {}) or {}
+            away_data = item.get('away', {}) or {}
+            h_pri = home_data.get('xg_predicted_goals')
+            a_pri = away_data.get('xg_predicted_goals')
+
+        # Alt = V1 (goals-based)
+        h_alt, a_alt = _from_summary(item.get('predictions'))
+        if h_alt is None:
+            home_data = item.get('home', {}) or {}
+            away_data = item.get('away', {}) or {}
+            h_alt = home_data.get('predicted_goals')
+            a_alt = away_data.get('predicted_goals')
+
+        return {
+            'home_primary': h_pri,
+            'away_primary': a_pri,
+            'home_alt': h_alt,
+            'away_alt': a_alt,
+        }
+
     def _format_single_fixture(self, item: Dict) -> Dict:
         """
         Format a single fixture record.
@@ -67,14 +126,21 @@ class DataFormatter:
             len(item.get('best_bet', [])) > 0
         )
 
+        # Resolve which engine drives predicted_goals vs predicted_goals_alt:
+        #   predicted_goals      <- xg_predictions most-likely score (V2)
+        #   predicted_goals_alt  <- predictions     most-likely score (V1)
+        # See _resolve_score_components for fallback logic when one
+        # engine's summary is absent.
+        scores = self._resolve_score_components(item)
+
         # Extract home team data
         home_data = item.get('home', {})
         home_team = {
             'team_id': self._safe_decimal_convert(home_data.get('team_id')),
             'team_name': home_data.get('team_name'),
             'team_logo': home_data.get('team_logo'),
-            'predicted_goals': self._safe_decimal_convert(home_data.get('predicted_goals')),
-            'predicted_goals_alt': self._safe_decimal_convert(home_data.get('predicted_goals_alt')),
+            'predicted_goals': self._safe_decimal_convert(scores['home_primary']),
+            'predicted_goals_alt': self._safe_decimal_convert(scores['home_alt']),
             'home_performance': self._safe_decimal_convert(home_data.get('home_performance'))
         }
 
@@ -84,8 +150,8 @@ class DataFormatter:
             'team_id': self._safe_decimal_convert(away_data.get('team_id')),
             'team_name': away_data.get('team_name'),
             'team_logo': away_data.get('team_logo'),
-            'predicted_goals': self._safe_decimal_convert(away_data.get('predicted_goals')),
-            'predicted_goals_alt': self._safe_decimal_convert(away_data.get('predicted_goals_alt')),
+            'predicted_goals': self._safe_decimal_convert(scores['away_primary']),
+            'predicted_goals_alt': self._safe_decimal_convert(scores['away_alt']),
             'away_performance': self._safe_decimal_convert(away_data.get('away_performance'))
         }
 
