@@ -15,13 +15,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.prediction.xg_engine import (
     calculate_coordinated_predictions_xg,
-    create_xg_prediction_summary_dict,
     compute_form_multiplier,
     dixon_coles_joint_probs,
     _dc_tau,
     _poisson_pmf,
     _marginals,
 )
+from src.prediction.prediction_engine import create_prediction_summary_dict
 
 
 class TestPoissonPmf(unittest.TestCase):
@@ -236,23 +236,33 @@ class TestCalculateCoordinated(unittest.TestCase):
             )
 
 
-class TestSummaryDict(unittest.TestCase):
+class TestV1SummaryShape(unittest.TestCase):
+    """V2 reuses V1's create_prediction_summary_dict so output shapes
+    are identical between engines. Verify the shape contract here."""
 
-    def test_summary_shape_and_totals(self):
+    def test_v2_uses_v1_summary_shape(self):
         home_probs = {0: 0.2, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.07, 5: 0.03}
         away_probs = {0: 0.3, 1: 0.3, 2: 0.2, 3: 0.12, 4: 0.05, 5: 0.03}
-        s = create_xg_prediction_summary_dict(home_probs, away_probs)
+        s = create_prediction_summary_dict(home_probs, away_probs)
 
-        self.assertIn("home", s)
-        self.assertIn("away", s)
-        self.assertIn("btts_yes", s)
-        self.assertIn("total_goals_over_2_5", s)
+        # V1 schema (these MUST be present so V2 output is shape-compatible)
+        for key in ("most_likely_score", "expected_goals", "match_outcome",
+                    "goals", "top_scores", "odds"):
+            self.assertIn(key, s, f"V1 schema missing key: {key}")
 
-        # home.probability_to_score = 1 - 0.2 = 0.8
-        self.assertAlmostEqual(float(s["home"]["probability_to_score"]), 0.8, places=4)
-        # btts_yes = 0.8 * 0.7 = 0.56
-        self.assertAlmostEqual(float(s["btts_yes"]), 0.56, places=4)
-        self.assertAlmostEqual(float(s["btts_no"]), 0.44, places=4)
+        # match_outcome inner shape
+        for key in ("home_win", "draw", "away_win"):
+            self.assertIn(key, s["match_outcome"])
+        # goals inner shape
+        for key in ("over", "under", "btts"):
+            self.assertIn(key, s["goals"])
+
+        # Match outcome values are in PERCENT (not probability) — V1 multiplies by 100.
+        # Sum should be ~100, not ~1.
+        total_pct = (s["match_outcome"]["home_win"]
+                     + s["match_outcome"]["draw"]
+                     + s["match_outcome"]["away_win"])
+        self.assertAlmostEqual(total_pct, 100.0, places=0)
 
 
 if __name__ == "__main__":

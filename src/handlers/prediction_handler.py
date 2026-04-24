@@ -16,7 +16,6 @@ from ..prediction.prediction_engine import (
 )
 from ..prediction.xg_engine import (
     calculate_coordinated_predictions_xg,
-    create_xg_prediction_summary_dict,
 )
 from ..data.xg_data_access import (
     get_team_xg_params,
@@ -490,7 +489,7 @@ def process_fixtures(fixtures):
                 away_team_stats['xg_predicted_goals'] = int(a_pg_v2a)
                 home_team_stats['xg_likelihood'] = Decimal(str(h_lh_v2a))
                 away_team_stats['xg_likelihood'] = Decimal(str(a_lh_v2a))
-                xg_prediction_summary = create_xg_prediction_summary_dict(h_probs_v2a, a_probs_v2a)
+                xg_prediction_summary = create_prediction_summary_dict(h_probs_v2a, a_probs_v2a)
 
                 # --- V2b: team params + pooled stream ---
                 (h_sp_v2b, h_pg_v2b, h_lh_v2b, h_probs_v2b,
@@ -509,7 +508,7 @@ def process_fixtures(fixtures):
                 away_team_stats['xg_predicted_goals_alt'] = int(a_pg_v2b)
                 home_team_stats['xg_likelihood_alt'] = Decimal(str(h_lh_v2b))
                 away_team_stats['xg_likelihood_alt'] = Decimal(str(a_lh_v2b))
-                xg_alternate_prediction_summary = create_xg_prediction_summary_dict(h_probs_v2b, a_probs_v2b)
+                xg_alternate_prediction_summary = create_prediction_summary_dict(h_probs_v2b, a_probs_v2b)
 
                 # --- V2c: league params + venue stream (skip_home_adv, venue_mode) ---
                 (h_sp_v2c, h_pg_v2c, h_lh_v2c, h_probs_v2c,
@@ -528,7 +527,7 @@ def process_fixtures(fixtures):
                 away_team_stats['xg_predicted_goals_venue'] = int(a_pg_v2c)
                 home_team_stats['xg_likelihood_venue'] = Decimal(str(h_lh_v2c))
                 away_team_stats['xg_likelihood_venue'] = Decimal(str(a_lh_v2c))
-                xg_venue_prediction_summary = create_xg_prediction_summary_dict(h_probs_v2c, a_probs_v2c)
+                xg_venue_prediction_summary = create_prediction_summary_dict(h_probs_v2c, a_probs_v2c)
 
                 # --- V2d: team params + venue stream (skip_home_adv, venue_mode) ---
                 (h_sp_v2d, h_pg_v2d, h_lh_v2d, h_probs_v2d,
@@ -547,10 +546,15 @@ def process_fixtures(fixtures):
                 away_team_stats['xg_predicted_goals_venue_alt'] = int(a_pg_v2d)
                 home_team_stats['xg_likelihood_venue_alt'] = Decimal(str(h_lh_v2d))
                 away_team_stats['xg_likelihood_venue_alt'] = Decimal(str(a_lh_v2d))
-                xg_venue_alternate_prediction_summary = create_xg_prediction_summary_dict(h_probs_v2d, a_probs_v2d)
+                xg_venue_alternate_prediction_summary = create_prediction_summary_dict(h_probs_v2d, a_probs_v2d)
 
+                # Reflect the reliability of the team-specific variants (V2b/V2d).
+                # Including league_shaped_params here would force the flag to
+                # 'league_avg' on every fixture even when both teams have real fits,
+                # since league_shaped_params carries data_quality='league_avg' by
+                # definition.
                 xg_data_quality = aggregate_data_quality(
-                    effective_team_home, effective_team_away, league_shaped_params,
+                    effective_team_home, effective_team_away,
                 )
 
                 xg_coordination_info = {

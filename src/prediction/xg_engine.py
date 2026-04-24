@@ -319,69 +319,13 @@ def calculate_coordinated_predictions_xg(
 
 
 # --------------------------------------------------------------------------
-# Summary dict (for fixture-level xg_predictions attribute)
+# Summary dict
 # --------------------------------------------------------------------------
-
-
-def create_xg_prediction_summary_dict(
-    home_probs: Dict[int, float], away_probs: Dict[int, float]
-) -> Dict[str, Any]:
-    """Build the fixture-level xg_predictions summary used by downstream
-    consumers (visualization, analytics, AI). Shape mirrors V1's
-    create_prediction_summary_dict so consumers can reuse parsing.
-
-    Includes market-level aggregates (BTTS, O/U, etc.) derived from the
-    goal-probability distributions. Uses independence between the two
-    marginals for these aggregates — the Dixon-Coles correction is already
-    baked into the marginals via the upstream joint table.
-    """
-    def _dec_dict(probs: Dict[int, float]) -> Dict[str, Decimal]:
-        return {str(k): Decimal(str(round(float(v), 6))) for k, v in probs.items()}
-
-    def _side_side(probs: Dict[int, float]) -> Dict[str, Any]:
-        prob_to_score = 1.0 - probs.get(0, 0.0)
-        most_likely = max(probs, key=probs.get)
-        likelihood = probs[most_likely]
-        over15 = sum(v for k, v in probs.items() if k >= 2)
-        over25 = sum(v for k, v in probs.items() if k >= 3)
-        over35 = sum(v for k, v in probs.items() if k >= 4)
-        return {
-            "probability_to_score": Decimal(str(round(prob_to_score, 6))),
-            "predicted_goals": int(most_likely),
-            "likelihood": Decimal(str(round(likelihood, 6))),
-            "goal_probabilities": _dec_dict(probs),
-            "over_1_5": Decimal(str(round(over15, 6))),
-            "over_2_5": Decimal(str(round(over25, 6))),
-            "over_3_5": Decimal(str(round(over35, 6))),
-            "under_2_5": Decimal(str(round(1.0 - over25, 6))),
-        }
-
-    # Market aggregates that combine both teams
-    p_h_scores = 1.0 - home_probs.get(0, 0.0)
-    p_a_scores = 1.0 - away_probs.get(0, 0.0)
-    btts_yes = p_h_scores * p_a_scores
-
-    # Total-goals distribution: convolve marginals (approximation — exact
-    # total-goals probs should come from the joint table, but the marginals
-    # already reflect DC correction so the convolution is close enough for
-    # market aggregation).
-    max_goals = max(home_probs) + max(away_probs)
-    total_probs: Dict[int, float] = {t: 0.0 for t in range(max_goals + 1)}
-    for h, ph in home_probs.items():
-        for a, pa in away_probs.items():
-            total_probs[h + a] += ph * pa
-
-    total_over_15 = sum(v for k, v in total_probs.items() if k >= 2)
-    total_over_25 = sum(v for k, v in total_probs.items() if k >= 3)
-    total_over_35 = sum(v for k, v in total_probs.items() if k >= 4)
-
-    return {
-        "home": _side_side(home_probs),
-        "away": _side_side(away_probs),
-        "btts_yes": Decimal(str(round(btts_yes, 6))),
-        "btts_no": Decimal(str(round(1.0 - btts_yes, 6))),
-        "total_goals_over_1_5": Decimal(str(round(total_over_15, 6))),
-        "total_goals_over_2_5": Decimal(str(round(total_over_25, 6))),
-        "total_goals_over_3_5": Decimal(str(round(total_over_35, 6))),
-        "total_goals_under_2_5": Decimal(str(round(1.0 - total_over_25, 6))),
-    }
+#
+# V2 reuses V1's create_prediction_summary_dict from
+# src/prediction/prediction_engine.py for fixture-level xg_predictions etc.
+# The function takes goal-probability dicts (which V2 produces in the same
+# shape as V1) and returns the canonical summary structure with
+# most_likely_score, expected_goals, match_outcome, goals.over/under/btts,
+# top_scores, and odds. Reusing it guarantees V1 and V2 outputs share an
+# identical schema for downstream consumers.
