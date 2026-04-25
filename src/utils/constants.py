@@ -84,37 +84,18 @@ GAME_FIXTURES_TABLE = _get_table_name('game_fixtures')
 LEAGUE_PARAMETERS_TABLE = _get_table_name('league_parameters')
 TEAM_PARAMETERS_TABLE = _get_table_name('team_parameters')
 
-# Match-statistics source-of-truth table (per-team-per-fixture stats).
-# Populated post-match via /v3/fixtures/statistics. Used by V3 fitter.
+# Match-statistics table (per-team-per-fixture stats).
+# Populated post-match via /v3/fixtures/statistics. Currently no consumer
+# downstream — kept intact so the post-match ingest path keeps working
+# without raising. Safe to drop along with the ingest if you want it gone.
 MATCH_STATISTICS_TABLE = _get_table_name('match_statistics')
 
-# V3 SoT-engine parameter tables. Recomputed weekly by the fitter lambda.
-TEAM_SOT_PARAMETERS_TABLE = _get_table_name('team_sot_parameters')
-LEAGUE_SOT_PARAMETERS_TABLE = _get_table_name('league_sot_parameters')
-
-# V3 engine constants.
-#   SOT_NB_ALPHA: dispersion for the per-team Negative Binomial. Matches
-#     legacy α=0.3 — goals are mildly overdispersed (V/M ≈ 1.06) so plain
-#     Poisson under-counts the upper tail.
-#   SOT_SHRINKAGE_K: cold-start prior weight (in pseudo-matches) for
-#     team SoT_for / goals_conceded. The team mean is shrunk toward the
-#     league mean by k / (k + n_observed). With k=5 a team needs ~5 real
-#     matches to outweigh the prior. Larger ⇒ more shrinkage.
-#   SOT_MIN_MATCHES_FULL: below this, the team's data_quality is flagged
-#     'sparse' and the engine downgrades confidence accordingly.
-#   SOT_TO_GOAL_FALLBACK: only used when a league has zero data (brand
-#     new league, no fitted params yet). The 0.317 figure is the global
-#     pooled mean across all 27 leagues we observed.
-SOT_NB_ALPHA = 0.3
-SOT_SHRINKAGE_K = 5
-SOT_MIN_MATCHES_FULL = 10
-SOT_TO_GOAL_FALLBACK = 0.317
-
-# Backwards-compat alias for match-statistics ingest path. The V2 ingester
-# used this constant to derive expected_goals from SoT when the API didn't
-# emit native xG. V3 doesn't read expected_goals at all, but the ingest
-# code still references the constant; keep it pointing at the same value.
-SOT_TO_XG_FACTOR = SOT_TO_GOAL_FALLBACK
+# Used by src/data/match_statistics.py to derive a synthetic expected_goals
+# when the upstream API doesn't emit one. Numeric value comes from the
+# global pooled SoT->goal conversion rate (0.317) we measured across the
+# 27 leagues we have data for. The constant is kept solely so the
+# match-statistics ingester continues to import cleanly.
+SOT_TO_XG_FACTOR = 0.317
 
 # SQS Queue URLs
 # Default queue URL - will be updated by infrastructure setup script

@@ -14,15 +14,6 @@ from ..prediction.prediction_engine import (
     calculate_base_lambda,
     create_prediction_summary_dict
 )
-from ..prediction.sot_engine import (
-    calculate_predictions_sot,
-    create_sot_prediction_summary_dict,
-)
-from ..data.sot_data_access import (
-    get_team_sot_params,
-    get_league_sot_params,
-    league_params_as_team_fallback,
-)
 from ..data.api_client import (
     get_team_statistics,
     get_venue_id,
@@ -436,93 +427,6 @@ def process_fixtures(fixtures):
             else:
                 print(f"Venue-specific predictions not available for fixture {fixture_id}: insufficient venue-filtered data")
 
-            # =================================================================
-            # V3 SoT-BASED PREDICTION
-            # Runs in parallel with V1. V1 remains primary; V3 is the
-            # alternate (stored as sot_* attributes / sot_predictions).
-            # Wrapped so any V3 failure is isolated from V1 outputs.
-            # See docs/v3/README.md.
-            # =================================================================
-            sot_prediction_summary = None
-            sot_coordination_info = {"v3_enabled": False}
-            sot_data_quality = "unavailable"
-
-            try:
-                print("=== CALCULATING V3 SoT PREDICTIONS ===")
-                league_sot_params = get_league_sot_params(league_id)
-                if not league_sot_params:
-                    raise RuntimeError(
-                        f"No league SoT params for league {league_id}; "
-                        f"run football-sot-parameter-fitter-prod."
-                    )
-
-                team_sot_home = get_team_sot_params(home_team_id, league_id)
-                team_sot_away = get_team_sot_params(away_team_id, league_id)
-
-                # Cold-start fallback: a team with no fitted record uses
-                # league-average values shaped to look like a team record.
-                fallback = league_params_as_team_fallback(league_sot_params)
-                effective_home = team_sot_home or fallback
-                effective_away = team_sot_away or fallback
-
-                (h_sp_v3, h_pg_v3, h_lh_v3, h_probs_v3,
-                 a_sp_v3, a_pg_v3, a_lh_v3, a_probs_v3,
-                 info_v3) = calculate_predictions_sot(
-                    home_team_params=effective_home,
-                    away_team_params=effective_away,
-                    league_params=league_sot_params,
-                    league_id=league_id, season=season,
-                    home_team_id=home_team_id, away_team_id=away_team_id,
-                    prediction_date=date_dt,
-                )
-
-                home_team_stats['sot_probability_to_score'] = Decimal(str(h_sp_v3))
-                away_team_stats['sot_probability_to_score'] = Decimal(str(a_sp_v3))
-                home_team_stats['sot_predicted_goals'] = int(h_pg_v3)
-                away_team_stats['sot_predicted_goals'] = int(a_pg_v3)
-                home_team_stats['sot_likelihood'] = Decimal(str(h_lh_v3))
-                away_team_stats['sot_likelihood'] = Decimal(str(a_lh_v3))
-
-                sot_prediction_summary = create_sot_prediction_summary_dict(
-                    h_probs_v3, a_probs_v3, h_pg_v3, a_pg_v3,
-                )
-
-                # data_quality: worst-of of the two team flags. cold_start
-                # > sparse > full (worst first). league_avg means the team
-                # had no fitted record at all (fallback path).
-                rank = {"unavailable": 0, "cold_start": 1, "league_avg": 2,
-                        "sparse": 3, "full": 4, "unknown": 0}
-                qh = effective_home.get("data_quality", "unknown")
-                qa = effective_away.get("data_quality", "unknown")
-                sot_data_quality = qh if rank.get(qh, 0) <= rank.get(qa, 0) else qa
-
-                sot_coordination_info = {
-                    "v3_enabled": True,
-                    "engine_version": info_v3.get("engine_version"),
-                    "lambda_h": info_v3.get("lambda_h"),
-                    "lambda_a": info_v3.get("lambda_a"),
-                    "conv_rate": info_v3.get("conv_rate"),
-                    "def_ratio_for_h": info_v3.get("def_ratio_for_h"),
-                    "def_ratio_for_a": info_v3.get("def_ratio_for_a"),
-                    "team_params_home_source": "team" if team_sot_home else "league_avg",
-                    "team_params_away_source": "team" if team_sot_away else "league_avg",
-                }
-                print(f"V3 SoT prediction written for fixture {fixture_id} "
-                      f"(λ_H={info_v3.get('lambda_h')}, λ_A={info_v3.get('lambda_a')}, "
-                      f"quality={sot_data_quality})")
-
-            except Exception as sot_e:
-                print(f"V3 SoT prediction failed for fixture {fixture_id}: {sot_e}")
-                import traceback
-                traceback.print_exc()
-                sot_coordination_info = {
-                    "v3_enabled": False,
-                    "v3_failed": True,
-                    "error": str(sot_e),
-                }
-                sot_data_quality = "unavailable"
-                # sot_prediction_summary remains None; key omitted from output.
-
             # Add additional fixture data
             home_team_stats['record_id'] = f"{fixture['fixture_id']}_home_{home_team_id}"
             away_team_stats['record_id'] = f"{fixture['fixture_id']}_away_{away_team_id}"
@@ -580,9 +484,6 @@ def process_fixtures(fixtures):
                 "alternate_predictions": prediction_summary_alt,
                 "venue_predictions": venue_prediction_summary,
                 "venue_alternate_predictions": venue_prediction_summary_alt,
-                "sot_predictions": sot_prediction_summary,
-                "sot_coordination_info": convert_floats_to_decimal(sot_coordination_info),
-                "sot_data_quality": sot_data_quality,
                 "coordination_info": {
                     "league_coordination": convert_floats_to_decimal(league_coordination_info),
                     "team_coordination": convert_floats_to_decimal(team_coordination_info),

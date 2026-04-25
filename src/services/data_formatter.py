@@ -67,13 +67,9 @@ class DataFormatter:
             len(item.get('best_bet', [])) > 0
         )
 
-        # V1 (the per-match goal-arrays engine) is primary; V3 (the SoT
-        # engine) is the alternate. Sourcing:
-        #   predicted_goals       <- home.predicted_goals       (V1)
-        #   predicted_goals_alt   <- home.sot_predicted_goals   (V3)
-        #
-        # If V3 hasn't run yet (cold-start league with no fitted SoT params,
-        # or the V3 block raised), predicted_goals_alt is omitted.
+        # V1-only sourcing.
+        #   predicted_goals      <- home.predicted_goals      (V1, league-params variant)
+        #   predicted_goals_alt  <- home.predicted_goals_alt  (V1, team-params variant)
         home_data = item.get('home', {})
         away_data = item.get('away', {})
 
@@ -82,7 +78,7 @@ class DataFormatter:
             'team_name': home_data.get('team_name'),
             'team_logo': home_data.get('team_logo'),
             'predicted_goals': self._safe_decimal_convert(home_data.get('predicted_goals')),
-            'predicted_goals_alt': self._safe_decimal_convert(home_data.get('sot_predicted_goals')),
+            'predicted_goals_alt': self._safe_decimal_convert(home_data.get('predicted_goals_alt')),
             'home_performance': self._safe_decimal_convert(home_data.get('home_performance'))
         }
 
@@ -91,7 +87,7 @@ class DataFormatter:
             'team_name': away_data.get('team_name'),
             'team_logo': away_data.get('team_logo'),
             'predicted_goals': self._safe_decimal_convert(away_data.get('predicted_goals')),
-            'predicted_goals_alt': self._safe_decimal_convert(away_data.get('sot_predicted_goals')),
+            'predicted_goals_alt': self._safe_decimal_convert(away_data.get('predicted_goals_alt')),
             'away_performance': self._safe_decimal_convert(away_data.get('away_performance'))
         }
 
