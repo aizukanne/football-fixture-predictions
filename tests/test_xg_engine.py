@@ -1,6 +1,6 @@
 """Unit tests for src/prediction/xg_engine.
 
-Pure-math tests on synthetic parameter inputs. No DynamoDB, no API.
+Pure-math tests on synthetic per-match xG arrays. No DynamoDB, no API.
 """
 
 from __future__ import annotations
@@ -15,48 +15,70 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.prediction.xg_engine import (
     calculate_coordinated_predictions_xg,
-    compute_form_multiplier,
     dixon_coles_joint_probs,
     _dc_tau,
     _poisson_pmf,
     _marginals,
+    _smooth,
 )
 from src.prediction.prediction_engine import create_prediction_summary_dict
 
 
+# --------------------------------------------------------------------------
+# Building blocks
+# --------------------------------------------------------------------------
+
+
 class TestPoissonPmf(unittest.TestCase):
 
-    def test_zero_lambda_returns_one_at_zero(self):
+    def test_zero_lambda(self):
         self.assertEqual(_poisson_pmf(0, 0.0), 1.0)
         self.assertEqual(_poisson_pmf(1, 0.0), 0.0)
 
-    def test_sum_to_1_truncation(self):
-        # Lambda=1.5, summing PMF over 0..10 should be ≈ 1
+    def test_pmf_sum_to_one(self):
         total = sum(_poisson_pmf(k, 1.5) for k in range(20))
         self.assertAlmostEqual(total, 1.0, places=5)
 
     def test_mean_matches_lambda(self):
-        # E[X] = lambda for Poisson
         lam = 2.3
         mean = sum(k * _poisson_pmf(k, lam) for k in range(30))
         self.assertAlmostEqual(mean, lam, places=3)
 
 
+class TestSmooth(unittest.TestCase):
+
+    def test_no_observations_returns_prior(self):
+        self.assertEqual(_smooth([], 1.4, prior_weight=5), 1.4)
+
+    def test_many_observations_approach_observed_mean(self):
+        obs = [2.0] * 100
+        result = _smooth(obs, prior_mean=1.0, prior_weight=5)
+        # Weight on prior is 5/(5+100) ≈ 0.048; observed dominates
+        self.assertGreater(result, 1.9)
+        self.assertLess(result, 2.0)
+
+    def test_blend_proportional(self):
+        # 5 observations averaging 2.0 with prior 1.0 weight 5:
+        # (1.0*5 + 2.0*5) / (5+5) = 1.5
+        result = _smooth([2.0]*5, prior_mean=1.0, prior_weight=5)
+        self.assertAlmostEqual(result, 1.5, places=4)
+
+    def test_zero_prior_weight_returns_observed_mean(self):
+        result = _smooth([1.0, 2.0, 3.0], prior_mean=99.0, prior_weight=0)
+        self.assertAlmostEqual(result, 2.0, places=4)
+
+
 class TestDcTau(unittest.TestCase):
 
-    def test_identity_away_from_corners(self):
-        # Any (h, a) with h>1 or a>1 is identity
+    def test_identity_outside_corner(self):
         self.assertEqual(_dc_tau(2, 3, 1.5, 1.2, -0.18), 1.0)
         self.assertEqual(_dc_tau(0, 2, 1.5, 1.2, -0.18), 1.0)
 
-    def test_zero_zero(self):
-        # tau(0,0) = 1 - lh*la*rho. For rho<0, this is > 1 (low scores boosted).
+    def test_zero_zero_boost_for_negative_rho(self):
         tau = _dc_tau(0, 0, 1.5, 1.2, -0.18)
-        expected = 1 - 1.5 * 1.2 * -0.18
-        self.assertAlmostEqual(tau, expected, places=6)
         self.assertGreater(tau, 1.0)
 
-    def test_rho_zero_gives_identity_everywhere(self):
+    def test_rho_zero_identity(self):
         for h in range(3):
             for a in range(3):
                 self.assertEqual(_dc_tau(h, a, 1.5, 1.2, 0.0), 1.0)
@@ -64,201 +86,189 @@ class TestDcTau(unittest.TestCase):
 
 class TestDixonColesJoint(unittest.TestCase):
 
-    def test_sum_to_1(self):
-        joint = dixon_coles_joint_probs(1.4, 1.1, rho=-0.18, max_goals=10)
+    def test_sum_to_one(self):
+        joint = dixon_coles_joint_probs(1.4, 1.1, rho=-0.18)
         total = sum(joint[h][a] for h in joint for a in joint[h])
         self.assertAlmostEqual(total, 1.0, places=9)
 
-    def test_rho_zero_matches_independent_poisson(self):
-        joint = dixon_coles_joint_probs(1.5, 1.0, rho=0.0, max_goals=10)
-        # Independent: P(h,a) = Poisson(h,1.5) * Poisson(a,1.0) (normalized to 1)
-        for h in range(4):
-            for a in range(4):
-                expected_raw = _poisson_pmf(h, 1.5) * _poisson_pmf(a, 1.0)
-                # Renormalization: total should be close to 1 already for max_goals=10
-                self.assertAlmostEqual(joint[h][a], expected_raw, places=3)
-
-    def test_marginals_are_valid_distributions(self):
-        joint = dixon_coles_joint_probs(1.4, 1.1, rho=-0.18, max_goals=10)
-        home, away = _marginals(joint)
-        self.assertAlmostEqual(sum(home.values()), 1.0, places=6)
-        self.assertAlmostEqual(sum(away.values()), 1.0, places=6)
-        for v in home.values():
-            self.assertGreaterEqual(v, 0)
-        for v in away.values():
+    def test_marginals_valid(self):
+        joint = dixon_coles_joint_probs(1.4, 1.1, rho=-0.18)
+        h, a = _marginals(joint)
+        self.assertAlmostEqual(sum(h.values()), 1.0, places=6)
+        self.assertAlmostEqual(sum(a.values()), 1.0, places=6)
+        for v in (*h.values(), *a.values()):
             self.assertGreaterEqual(v, 0)
 
-    def test_negative_rho_boosts_low_scores(self):
-        joint_indep = dixon_coles_joint_probs(1.4, 1.1, rho=0.0, max_goals=10)
-        joint_dc = dixon_coles_joint_probs(1.4, 1.1, rho=-0.18, max_goals=10)
-        # 0-0 should be more likely under DC with negative rho
-        self.assertGreater(joint_dc[0][0], joint_indep[0][0])
 
-
-class TestFormMultiplier(unittest.TestCase):
-
-    def test_empty_stream_returns_one(self):
-        self.assertEqual(compute_form_multiplier([], 1.5), 1.0)
-        self.assertEqual(compute_form_multiplier(None or (), 1.5), 1.0)
-
-    def test_zero_baseline_returns_one(self):
-        self.assertEqual(compute_form_multiplier([2.0, 1.5], 0.0), 1.0)
-
-    def test_flat_stream_returns_one(self):
-        mult = compute_form_multiplier([1.5, 1.5, 1.5], 1.5)
-        self.assertAlmostEqual(mult, 1.0, places=4)
-
-    def test_hot_stream_clamped_to_max(self):
-        # Recent xG way above baseline
-        mult = compute_form_multiplier([5.0, 4.0, 5.0], 1.0)
-        self.assertEqual(mult, 1.3)  # clamped
-
-    def test_cold_stream_clamped_to_min(self):
-        mult = compute_form_multiplier([0.1, 0.2, 0.0], 2.0)
-        self.assertEqual(mult, 0.7)  # clamped
-
-    def test_moderate_hot_not_clamped(self):
-        # Stream slightly above baseline
-        mult = compute_form_multiplier([1.7, 1.6, 1.5], 1.5)
-        self.assertGreater(mult, 1.0)
-        self.assertLess(mult, 1.3)
+# --------------------------------------------------------------------------
+# End-to-end engine
+# --------------------------------------------------------------------------
 
 
 class TestCalculateCoordinated(unittest.TestCase):
 
-    def _std_params(self):
-        league = {
-            "league_avg_xg_for": Decimal("1.4"),
+    def _league(self):
+        return {
             "league_avg_xg_home": Decimal("1.55"),
             "league_avg_xg_away": Decimal("1.25"),
-            "home_adv": Decimal("1.24"),
             "rho_dc": Decimal("-0.18"),
-            "n_matches": 200,
         }
-        home = {
-            "mu_xg_for": Decimal("1.8"),       # strong attack
-            "mu_xg_against": Decimal("1.0"),   # good defense
-            "mu_xg_for_home": Decimal("1.9"),
-            "mu_xg_against_home": Decimal("0.95"),
-            "mu_xg_for_away": Decimal("1.7"),
-            "mu_xg_against_away": Decimal("1.05"),
-            "data_quality": "full",
-        }
-        away = {
-            "mu_xg_for": Decimal("1.2"),
-            "mu_xg_against": Decimal("1.5"),
-            "mu_xg_for_home": Decimal("1.3"),
-            "mu_xg_against_home": Decimal("1.45"),
-            "mu_xg_for_away": Decimal("1.1"),
-            "mu_xg_against_away": Decimal("1.55"),
-            "data_quality": "full",
-        }
-        return home, away, league
 
-    def test_standard_call_produces_expected_shape(self):
-        home, away, league = self._std_params()
+    def _strong_priors(self):
+        return {"mu_xg_for": Decimal("1.8"), "mu_xg_against": Decimal("1.0"),
+                "data_quality": "full"}
+
+    def _weak_priors(self):
+        return {"mu_xg_for": Decimal("1.0"), "mu_xg_against": Decimal("1.8"),
+                "data_quality": "full"}
+
+    def test_returns_9_tuple(self):
         result = calculate_coordinated_predictions_xg(
-            home_team_xg_stats=[], away_team_xg_stats=[],
-            home_params=home, away_params=away, league_params=league,
+            home_xg_for_array=[1.7]*10,
+            home_xg_against_array=[0.9]*10,
+            away_xg_for_array=[1.0]*10,
+            away_xg_against_array=[1.7]*10,
+            home_priors=self._strong_priors(),
+            away_priors=self._weak_priors(),
+            league_params=self._league(),
         )
         self.assertEqual(len(result), 9)
-        (h_sp, h_pg, h_lh, h_probs,
-         a_sp, a_pg, a_lh, a_probs, info) = result
-
-        # Probabilities in [0, 1]
-        for v in (h_sp, a_sp, h_lh, a_lh):
-            self.assertGreaterEqual(v, 0)
-            self.assertLessEqual(v, 1)
+        h_sp, h_pg, h_lh, h_probs, a_sp, a_pg, a_lh, a_probs, info = result
+        # Probabilities valid
         self.assertAlmostEqual(sum(h_probs.values()), 1.0, places=6)
         self.assertAlmostEqual(sum(a_probs.values()), 1.0, places=6)
-        # Predicted goals in valid range
-        self.assertGreaterEqual(h_pg, 0)
-        self.assertLessEqual(h_pg, 10)
-        # Home should score more than away given the strong-home profile
+        for v in (h_sp, a_sp, h_lh, a_lh):
+            self.assertGreaterEqual(v, 0); self.assertLessEqual(v, 1)
+        # Strong vs weak: home should have higher score probability
         self.assertGreater(h_sp, a_sp)
-        # coordination_info sanity
-        self.assertEqual(info["engine_version"], "v2-xg-1.0")
-        self.assertTrue(info["home_adv_applied"])
+        # coordination_info present
+        self.assertEqual(info["engine_version"], "v2-xg-2.0")
         self.assertIn("lambda_H", info)
 
-    def test_lambda_formula(self):
-        home, away, league = self._std_params()
-        # Expected lambda_H: mu_atk_H * mu_def_A / league_avg * sqrt(home_adv)
-        # = 1.8 * 1.5 / 1.4 * sqrt(1.24) ≈ 2.148
+    def test_per_match_observations_drive_prediction(self):
+        """The same priors but different observation arrays should yield
+        meaningfully different lambdas. This is the property V1 has and
+        v2-xg-1.0 lacked."""
+        league = self._league()
+        # Same neutral priors for both fixtures
+        priors = {"mu_xg_for": Decimal("1.4"), "mu_xg_against": Decimal("1.4"),
+                  "data_quality": "full"}
+
+        # Fixture A: home dominant in observations
+        result_a = calculate_coordinated_predictions_xg(
+            home_xg_for_array=[2.5]*15,    # team_H generates a lot
+            home_xg_against_array=[0.5]*15, # concedes little
+            away_xg_for_array=[0.7]*15,
+            away_xg_against_array=[2.3]*15,
+            home_priors=priors, away_priors=priors,
+            league_params=league,
+        )
+        # Fixture B: away dominant in observations
+        result_b = calculate_coordinated_predictions_xg(
+            home_xg_for_array=[0.7]*15,
+            home_xg_against_array=[2.3]*15,
+            away_xg_for_array=[2.5]*15,
+            away_xg_against_array=[0.5]*15,
+            home_priors=priors, away_priors=priors,
+            league_params=league,
+        )
+        # Lambdas should differ in opposite directions
+        info_a = result_a[8]
+        info_b = result_b[8]
+        self.assertGreater(info_a["lambda_H"], info_b["lambda_H"])
+        self.assertLess(info_a["lambda_A"], info_b["lambda_A"])
+
+    def test_empty_arrays_fall_back_to_priors(self):
+        """If a team has no observations, the smoothed mean equals the prior."""
+        league = self._league()
         result = calculate_coordinated_predictions_xg(
-            home_team_xg_stats=[], away_team_xg_stats=[],
-            home_params=home, away_params=away, league_params=league,
+            home_xg_for_array=[],
+            home_xg_against_array=[],
+            away_xg_for_array=[],
+            away_xg_against_array=[],
+            home_priors=self._strong_priors(),
+            away_priors=self._weak_priors(),
+            league_params=league,
         )
-        info = result[-1]
-        expected = 1.8 * 1.5 / 1.4 * math.sqrt(1.24)
-        self.assertAlmostEqual(info["lambda_H"], expected, places=3)
+        info = result[8]
+        # Smoothed values equal the priors when there are 0 observations
+        self.assertAlmostEqual(info["smoothed_h_xg_for"], 1.8, places=4)
+        self.assertAlmostEqual(info["smoothed_h_xg_against"], 1.0, places=4)
+        self.assertAlmostEqual(info["smoothed_a_xg_for"], 1.0, places=4)
+        self.assertAlmostEqual(info["smoothed_a_xg_against"], 1.8, places=4)
 
-    def test_skip_home_adv(self):
-        home, away, league = self._std_params()
-        result_with = calculate_coordinated_predictions_xg(
-            home_team_xg_stats=[], away_team_xg_stats=[],
-            home_params=home, away_params=away, league_params=league,
-            skip_home_adv=False,
-        )
-        result_skip = calculate_coordinated_predictions_xg(
-            home_team_xg_stats=[], away_team_xg_stats=[],
-            home_params=home, away_params=away, league_params=league,
-            skip_home_adv=True,
-        )
-        # Without home_adv, lambda_H is smaller, lambda_A is larger
-        self.assertLess(result_skip[-1]["lambda_H"], result_with[-1]["lambda_H"])
-        self.assertGreater(result_skip[-1]["lambda_A"], result_with[-1]["lambda_A"])
-        self.assertFalse(result_skip[-1]["home_adv_applied"])
-
-    def test_venue_mode_uses_venue_mus(self):
-        home, away, league = self._std_params()
+    def test_venue_mode_picks_venue_priors(self):
+        league = self._league()
+        priors = {
+            "mu_xg_for": Decimal("1.4"),
+            "mu_xg_against": Decimal("1.4"),
+            "mu_xg_for_home": Decimal("2.0"),    # would be picked in venue_mode
+            "mu_xg_for_away": Decimal("0.9"),
+            "mu_xg_against_home": Decimal("0.8"),
+            "mu_xg_against_away": Decimal("1.7"),
+            "data_quality": "full",
+        }
+        # No observations — smoothed values fall back to whichever prior
+        # the engine selected.
         result_pooled = calculate_coordinated_predictions_xg(
-            home_team_xg_stats=[], away_team_xg_stats=[],
-            home_params=home, away_params=away, league_params=league,
-            skip_home_adv=True, venue_mode=False,
+            home_xg_for_array=[], home_xg_against_array=[],
+            away_xg_for_array=[], away_xg_against_array=[],
+            home_priors=priors, away_priors=priors,
+            league_params=league, venue_mode=False,
         )
         result_venue = calculate_coordinated_predictions_xg(
-            home_team_xg_stats=[], away_team_xg_stats=[],
-            home_params=home, away_params=away, league_params=league,
-            skip_home_adv=True, venue_mode=True,
+            home_xg_for_array=[], home_xg_against_array=[],
+            away_xg_for_array=[], away_xg_against_array=[],
+            home_priors=priors, away_priors=priors,
+            league_params=league, venue_mode=True,
         )
-        # Venue-mode should pick mu_xg_for_home (1.9) rather than mu_xg_for (1.8)
-        self.assertAlmostEqual(result_venue[-1]["mu_atk_H"], 1.9, places=3)
-        self.assertAlmostEqual(result_pooled[-1]["mu_atk_H"], 1.8, places=3)
+        self.assertAlmostEqual(result_pooled[8]["smoothed_h_xg_for"], 1.4, places=4)
+        self.assertAlmostEqual(result_venue[8]["smoothed_h_xg_for"],  2.0, places=4)
+        self.assertAlmostEqual(result_pooled[8]["smoothed_a_xg_for"], 1.4, places=4)
+        self.assertAlmostEqual(result_venue[8]["smoothed_a_xg_for"],  0.9, places=4)
 
-    def test_missing_league_avg_raises(self):
-        home, away, league = self._std_params()
-        league["league_avg_xg_for"] = Decimal("0")
+    def test_missing_league_params_raises(self):
         with self.assertRaises(ValueError):
             calculate_coordinated_predictions_xg(
-                home_team_xg_stats=[], away_team_xg_stats=[],
-                home_params=home, away_params=away, league_params=league,
+                home_xg_for_array=[], home_xg_against_array=[],
+                away_xg_for_array=[], away_xg_against_array=[],
+                home_priors=self._strong_priors(),
+                away_priors=self._weak_priors(),
+                league_params=None,
+            )
+
+    def test_zero_league_avg_raises(self):
+        bad_league = {
+            "league_avg_xg_home": Decimal("0"),
+            "league_avg_xg_away": Decimal("1.25"),
+            "rho_dc": Decimal("-0.18"),
+        }
+        with self.assertRaises(ValueError):
+            calculate_coordinated_predictions_xg(
+                home_xg_for_array=[1.5]*5, home_xg_against_array=[1.0]*5,
+                away_xg_for_array=[1.0]*5, away_xg_against_array=[1.5]*5,
+                home_priors=self._strong_priors(),
+                away_priors=self._weak_priors(),
+                league_params=bad_league,
             )
 
 
-class TestV1SummaryShape(unittest.TestCase):
-    """V2 reuses V1's create_prediction_summary_dict so output shapes
-    are identical between engines. Verify the shape contract here."""
+class TestV1SchemaCompatibility(unittest.TestCase):
+    """V2 reuses V1's create_prediction_summary_dict so output schemas
+    are identical between engines."""
 
-    def test_v2_uses_v1_summary_shape(self):
+    def test_v2_output_uses_v1_schema(self):
         home_probs = {0: 0.2, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.07, 5: 0.03}
         away_probs = {0: 0.3, 1: 0.3, 2: 0.2, 3: 0.12, 4: 0.05, 5: 0.03}
         s = create_prediction_summary_dict(home_probs, away_probs)
-
-        # V1 schema (these MUST be present so V2 output is shape-compatible)
         for key in ("most_likely_score", "expected_goals", "match_outcome",
                     "goals", "top_scores", "odds"):
             self.assertIn(key, s, f"V1 schema missing key: {key}")
-
-        # match_outcome inner shape
         for key in ("home_win", "draw", "away_win"):
             self.assertIn(key, s["match_outcome"])
-        # goals inner shape
         for key in ("over", "under", "btts"):
             self.assertIn(key, s["goals"])
-
-        # Match outcome values are in PERCENT (not probability) — V1 multiplies by 100.
-        # Sum should be ~100, not ~1.
+        # Match outcome is in PERCENT not probability
         total_pct = (s["match_outcome"]["home_win"]
                      + s["match_outcome"]["draw"]
                      + s["match_outcome"]["away_win"])

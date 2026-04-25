@@ -9,7 +9,7 @@ cannot accidentally share references. Talks only to the three V2 tables:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -51,79 +51,120 @@ def get_league_xg_params(league_id: int) -> Optional[Dict[str, Any]]:
     return resp.get("Item")
 
 
-def fetch_team_xg_stream(
+def fetch_team_xg_arrays(
     team_id: int,
     league_id: int,
     season: int,
     venue: Optional[str] = None,   # 'home' | 'away' | None
-    limit: int = 20,
-) -> List[float]:
-    """Recent xG_for values for a team, most-recent-first.
+    limit: int = 50,
+) -> Dict[str, List[float]]:
+    """Fetch a team's per-match xG_for and xG_against arrays.
 
-    Used by the engine for form-decay weighting. Queries the
-    league_date_idx GSI in reverse chronological order and filters to
-    rows for this team (and, optionally, this team's venue).
+    These are the V2 engine's primary observation channel — analogous to
+    V1's per-match goals_scored / goals_conceded arrays. Returns lists in
+    chronological order (oldest first) so downstream weighting (e.g. form
+    decay) can be applied if needed. The engine treats them as IID
+    samples for Bayesian smoothing.
+
+    To get xG_against for a fixture, we join on fixture_id: this team's
+    row gives xG_for, the OTHER team's row in the same fixture gives
+    xG_against. We do this with a single league/season query and an
+    in-memory grouping by fixture_id.
 
     Args:
         team_id, league_id, season: identifiers.
-        venue: 'home' → only matches where the team was home; 'away' →
-            only away; None → all.
-        limit: upper bound on the returned list length. The engine only
-            uses the first ~10 entries for form weighting, so this cap
-            keeps the query cheap.
+        venue: 'home' → only matches the team played at home;
+               'away' → only matches away; None → all.
+        limit: upper bound on the number of recent matches to return.
 
     Returns:
-        List of xG values (floats), ordered most-recent-first. May be
-        shorter than `limit`. Empty list on any error or if nothing found.
+        {
+          'xg_for':     [float, ...],   # this team's xG generated
+          'xg_against': [float, ...],   # this team's xG conceded
+        }
+        The two lists are aligned (same fixtures, same order). Empty
+        on any failure or if no data exists yet.
     """
     table = _table(MATCH_STATISTICS_TABLE)
-    stream: List[float] = []
 
-    # Over-fetch by 4x because each fixture has 2 team rows (the other
-    # team's row is filtered out), and we also filter by season + venue.
-    page_limit = max(limit * 4, 40)
-
+    # Pull all rows for this league/season and group by fixture_id.
+    fixtures_by_id: Dict[int, Dict[int, dict]] = {}  # fixture_id -> {team_id: row}
     kwargs = {
         "IndexName": "league_date_idx",
         "KeyConditionExpression": Key("league_id").eq(int(league_id)),
         "ScanIndexForward": False,  # newest first
-        "Limit": page_limit,
     }
     try:
-        while len(stream) < limit:
+        while True:
             resp = table.query(**kwargs)
-            items = resp.get("Items", [])
-            if not items:
-                break
-            for it in items:
+            for it in resp.get("Items", []):
                 try:
-                    if int(it.get("team_id", -1)) != int(team_id):
-                        continue
                     if int(it.get("season", -1)) != int(season):
                         continue
-                    if venue == "home" and not bool(it.get("is_home")):
-                        continue
-                    if venue == "away" and bool(it.get("is_home")):
-                        continue
-                    xg = it.get("expected_goals")
-                    if xg is None:
-                        continue
-                    stream.append(float(xg))
-                    if len(stream) >= limit:
-                        break
-                except (TypeError, ValueError, KeyError):
+                    fid = int(it["fixture_id"])
+                    tid = int(it["team_id"])
+                    fixtures_by_id.setdefault(fid, {})[tid] = it
+                except (KeyError, TypeError, ValueError):
                     continue
             lek = resp.get("LastEvaluatedKey")
             if not lek:
                 break
             kwargs["ExclusiveStartKey"] = lek
     except Exception as e:
-        # Non-fatal: an empty stream just flattens the form multiplier to 1.0.
-        print(f"fetch_team_xg_stream failed for team={team_id} "
+        print(f"fetch_team_xg_arrays failed for team={team_id} "
               f"league={league_id} season={season}: {e}")
-        return []
+        return {"xg_for": [], "xg_against": []}
 
-    return stream
+    # Build the arrays: most-recent first based on match_date.
+    rows_with_team: List[Tuple[str, dict, dict]] = []
+    for fid, by_tid in fixtures_by_id.items():
+        own = by_tid.get(team_id)
+        if not own:
+            continue
+        # Find the opponent's row.
+        opp_row = next(
+            (r for tid, r in by_tid.items() if tid != team_id), None
+        )
+        if opp_row is None:
+            continue
+        # Venue filter on this team's role.
+        if venue == "home" and not bool(own.get("is_home")):
+            continue
+        if venue == "away" and bool(own.get("is_home")):
+            continue
+        rows_with_team.append((own.get("match_date") or "", own, opp_row))
+
+    rows_with_team.sort(key=lambda x: x[0], reverse=True)
+    rows_with_team = rows_with_team[:limit]
+
+    xg_for: List[float] = []
+    xg_against: List[float] = []
+    for _, own, opp in rows_with_team:
+        own_xg = own.get("expected_goals")
+        opp_xg = opp.get("expected_goals")
+        if own_xg is None or opp_xg is None:
+            continue
+        try:
+            xg_for.append(float(own_xg))
+            xg_against.append(float(opp_xg))
+        except (TypeError, ValueError):
+            continue
+
+    return {"xg_for": xg_for, "xg_against": xg_against}
+
+
+def fetch_team_xg_stream(
+    team_id: int,
+    league_id: int,
+    season: int,
+    venue: Optional[str] = None,
+    limit: int = 20,
+) -> List[float]:
+    """Backwards-compatible wrapper returning just the xg_for stream.
+    Some callers (e.g. legacy form-decay logic) only need this side."""
+    return fetch_team_xg_arrays(
+        team_id, league_id, season, venue=venue, limit=limit
+    )["xg_for"]
 
 
 def league_params_as_team_shape(league_params: Dict[str, Any]) -> Dict[str, Any]:
