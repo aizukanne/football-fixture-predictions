@@ -338,7 +338,7 @@ def calculate_coordinated_predictions_xg(
     away_likelihood = away_probs.get(away_predicted_goals, 0.0)
 
     coordination_info: Dict[str, Any] = {
-        "engine_version": "v2-xg-2.1",
+        "engine_version": "v2-xg-2.2",
         "lambda_H": round(lambda_H, 4),
         "lambda_A": round(lambda_A, 4),
         "n_obs_home_for": len(home_xg_for_array or ()),
@@ -371,13 +371,77 @@ def calculate_coordinated_predictions_xg(
 
 
 # --------------------------------------------------------------------------
-# Summary dict
+# Summary dict (V2 wrapper around V1's create_prediction_summary_dict)
 # --------------------------------------------------------------------------
-#
-# V2 reuses V1's create_prediction_summary_dict (in
-# src/prediction/prediction_engine.py) for the fixture-level
-# xg_predictions / xg_alternate_predictions / xg_venue_predictions /
-# xg_venue_alternate_predictions attributes. V1's function takes goal-prob
-# dicts and returns the canonical {most_likely_score, expected_goals,
-# match_outcome, goals, top_scores, odds} structure. Reusing it
-# guarantees identical schema between V1 and V2 outputs.
+
+
+def create_xg_prediction_summary_dict(
+    home_probs: Dict[int, float],
+    away_probs: Dict[int, float],
+    home_predicted_goals: int,
+    away_predicted_goals: int,
+) -> Dict[str, Any]:
+    """V2's fixture-level summary dict.
+
+    Identical schema to V1's create_prediction_summary_dict (so downstream
+    consumers parse both engines the same way), with two overrides so that
+    summary-view fields agree with per-team marginal-mode attributes:
+
+        most_likely_score.score    = "{round(λ_H)}-{round(λ_A)}"
+        top_scores[0]              = same scoreline, surfaced at the top
+
+    Why the override:
+        V1's create_prediction_summary_dict computes most_likely_score as
+        argmax over the joint Poisson table (rebuilt from the marginals
+        under independence). For typical V2 lambdas in [1.0, 1.7] both
+        marginal modes are 1, so the joint mode collapses to "1-1" even
+        when the underlying lambdas (e.g. 1.22 / 1.86) imply something
+        like "1-2". V2's per-team xg_predicted_goals uses round(λ), which
+        does preserve that distinction, so we align the summary dict to
+        match.
+
+    The probability shown next to the overridden most_likely_score is
+    P(round(λ_H)) × P(round(λ_A)), same independence-product convention
+    V1 uses for the original joint cells.
+
+    Args:
+        home_probs / away_probs: marginal goal-probability dicts (0..N).
+        home_predicted_goals / away_predicted_goals: round(λ) values
+            already computed by the engine. Pass them in instead of
+            re-rounding to keep the engine as the single source of
+            truth for the rounding rule.
+
+    Returns:
+        Dict with the V1 schema (most_likely_score, expected_goals,
+        match_outcome, goals, top_scores, odds), with most_likely_score
+        and top_scores adjusted as described.
+    """
+    # Lazy import to avoid circular dependency at module load.
+    from .prediction_engine import create_prediction_summary_dict
+
+    summary = create_prediction_summary_dict(home_probs, away_probs)
+
+    h = int(home_predicted_goals)
+    a = int(away_predicted_goals)
+    score_str = f"{h}-{a}"
+
+    # Probability of this scoreline under independence — same convention
+    # V1 uses for joint cells in common_scores.
+    p_h = float(home_probs.get(h, 0.0))
+    p_a = float(away_probs.get(a, 0.0))
+    p_round = round(p_h * p_a * 100, 1)
+
+    summary["most_likely_score"] = {
+        "score": score_str,
+        "probability": p_round,
+    }
+
+    # Surface the same scoreline at the top of top_scores. If it's already
+    # there, move it; otherwise prepend. Keep the list at 5 entries so
+    # downstream UIs that expect that count don't break.
+    top = list(summary.get("top_scores") or [])
+    top = [s for s in top if isinstance(s, dict) and s.get("score") != score_str]
+    top.insert(0, {"score": score_str, "probability": p_round})
+    summary["top_scores"] = top[:5]
+
+    return summary

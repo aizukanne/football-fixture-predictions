@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from src.prediction.xg_engine import (
     calculate_coordinated_predictions_xg,
+    create_xg_prediction_summary_dict,
     dixon_coles_joint_probs,
     _dc_tau,
     _poisson_pmf,
@@ -177,7 +178,7 @@ class TestCalculateCoordinated(unittest.TestCase):
         # Strong vs weak: home should have higher score probability
         self.assertGreater(h_sp, a_sp)
         # coordination_info present
-        self.assertEqual(info["engine_version"], "v2-xg-2.1")
+        self.assertEqual(info["engine_version"], "v2-xg-2.2")
         self.assertIn("lambda_H", info)
         # predicted_goals = round(λ), not argmax of marginal PMF
         self.assertEqual(h_pg, max(0, round(info["lambda_H"])))
@@ -311,6 +312,50 @@ class TestCalculateCoordinated(unittest.TestCase):
                 away_priors=self._weak_priors(),
                 league_params=bad_league,
             )
+
+
+class TestXgSummaryDict(unittest.TestCase):
+    """V2's wrapper around V1's summary dict. Same schema, but
+    most_likely_score reflects round(λ) so summary view and per-team
+    xg_predicted_goals attribute always agree."""
+
+    def test_most_likely_score_uses_predicted_goals(self):
+        # Marginal modes for these probs: home=1, away=1 → joint mode 1-1
+        # But suppose round(λ) gave 1-2: the summary should reflect that.
+        home_probs = {0: 0.20, 1: 0.34, 2: 0.27, 3: 0.13, 4: 0.05, 5: 0.01}
+        away_probs = {0: 0.15, 1: 0.30, 2: 0.30, 3: 0.16, 4: 0.07, 5: 0.02}
+        s = create_xg_prediction_summary_dict(
+            home_probs, away_probs,
+            home_predicted_goals=1, away_predicted_goals=2,
+        )
+        self.assertEqual(s["most_likely_score"]["score"], "1-2")
+        # Probability under independence: 0.34 × 0.30 = 0.102 → 10.2%
+        self.assertAlmostEqual(s["most_likely_score"]["probability"], 10.2, places=1)
+
+    def test_most_likely_score_appears_at_top_of_top_scores(self):
+        home_probs = {0: 0.25, 1: 0.33, 2: 0.24, 3: 0.12, 4: 0.04}
+        away_probs = {0: 0.30, 1: 0.32, 2: 0.22, 3: 0.11, 4: 0.04}
+        s = create_xg_prediction_summary_dict(
+            home_probs, away_probs,
+            home_predicted_goals=2, away_predicted_goals=1,
+        )
+        self.assertEqual(s["top_scores"][0]["score"], "2-1")
+        self.assertLessEqual(len(s["top_scores"]), 5)
+        # No duplicate for the surfaced score
+        scores = [t["score"] for t in s["top_scores"]]
+        self.assertEqual(len(scores), len(set(scores)))
+
+    def test_v1_schema_keys_preserved(self):
+        home_probs = {0: 0.2, 1: 0.3, 2: 0.25, 3: 0.15, 4: 0.07, 5: 0.03}
+        away_probs = {0: 0.3, 1: 0.3, 2: 0.2, 3: 0.12, 4: 0.05, 5: 0.03}
+        s = create_xg_prediction_summary_dict(
+            home_probs, away_probs,
+            home_predicted_goals=1, away_predicted_goals=1,
+        )
+        # All V1 schema keys still present
+        for key in ("most_likely_score", "expected_goals", "match_outcome",
+                    "goals", "top_scores", "odds"):
+            self.assertIn(key, s)
 
 
 class TestV1SchemaCompatibility(unittest.TestCase):
