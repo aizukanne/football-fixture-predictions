@@ -84,16 +84,21 @@ class DataFormatter:
                     return _parse_score_str(first.get('score'))
             return None, None
 
-        # Primary = V2 (xG)
-        h_pri, a_pri = _from_summary(item.get('xg_predictions'))
+        # Primary = V2 TEAM-PARAMS variant (xg_alternate_predictions / V2b).
+        # We deliberately do NOT use xg_predictions (V2a) here: V2a is the
+        # league-baseline variant — its lambdas resolve to ~league_avg for
+        # both sides, so the joint mode collapses to 1-1 on almost every
+        # fixture. The team-aware V2 prediction lives in V2b.
+        h_pri, a_pri = _from_summary(item.get('xg_alternate_predictions'))
         if h_pri is None:
-            # Fall back to per-team xg_predicted_goals (still V2-derived)
+            # Fall back to per-team xg_predicted_goals_alt (V2b marginal mode)
             home_data = item.get('home', {}) or {}
             away_data = item.get('away', {}) or {}
-            h_pri = home_data.get('xg_predicted_goals')
-            a_pri = away_data.get('xg_predicted_goals')
+            h_pri = home_data.get('xg_predicted_goals_alt')
+            a_pri = away_data.get('xg_predicted_goals_alt')
 
-        # Alt = V1 (goals-based)
+        # Alt = V1 LEAGUE-PARAMS variant (predictions / V1a) — preserves the
+        # field that downstream consumers were already comparing against.
         h_alt, a_alt = _from_summary(item.get('predictions'))
         if h_alt is None:
             home_data = item.get('home', {}) or {}
