@@ -392,13 +392,13 @@ echo -e "${YELLOW}  ℹ Python 3.11 + llm-layer:1 ONLY${NC}"
 echo -e "${YELLOW}  ⚠ Remember to set API keys (GEMINI_API_KEY, ANTHROPIC_API_KEY, VALID_MOBILE_API_KEY)${NC}"
 echo ""
 
-# Deploy xG Parameter Fitter Handler (V2 engine weekly parameter refit)
-echo -e "${YELLOW}[10/10] Deploying xG Parameter Fitter Handler...${NC}"
+# Deploy SoT Parameter Fitter Handler (V3 engine weekly parameter refit)
+echo -e "${YELLOW}[10/10] Deploying SoT Parameter Fitter Handler...${NC}"
 aws lambda create-function \
-    --function-name "football-xg-parameter-fitter-${ENVIRONMENT}" \
+    --function-name "football-sot-parameter-fitter-${ENVIRONMENT}" \
     --runtime python3.13 \
     --role "$IAM_ROLE_ARN" \
-    --handler src.handlers.xg_parameter_handler.lambda_handler \
+    --handler src.handlers.sot_parameter_handler.lambda_handler \
     --zip-file fileb://"$PACKAGE_FILE" \
     --timeout 900 \
     --memory-size 1024 \
@@ -406,22 +406,21 @@ aws lambda create-function \
     --environment "Variables={ENVIRONMENT=${ENVIRONMENT},TABLE_PREFIX=football_,TABLE_SUFFIX=_${ENVIRONMENT},RAPIDAPI_KEY=4c37223acemsh65b1a8b456b72c1p15a99ajsnd4a09ab346a4}" \
     --region "$AWS_REGION" \
     2>/dev/null || aws lambda update-function-code \
-    --function-name "football-xg-parameter-fitter-${ENVIRONMENT}" \
+    --function-name "football-sot-parameter-fitter-${ENVIRONMENT}" \
     --zip-file fileb://"$PACKAGE_FILE" \
     --region "$AWS_REGION"
 
 aws lambda update-function-configuration \
-    --function-name "football-xg-parameter-fitter-${ENVIRONMENT}" \
+    --function-name "football-sot-parameter-fitter-${ENVIRONMENT}" \
     --runtime python3.13 \
     --layers "$LAMBDA_LAYER_ARN" \
     --region "$AWS_REGION" \
     2>/dev/null || true
 
-# No SQS trigger — invoked by EventBridge schedule (Wed 05:00 UTC).
-# Create the schedule with: ./scripts/create_xg_fitter_schedule.sh ${ENVIRONMENT}
+# No SQS trigger — invoked by EventBridge schedule (weekly).
 
-echo -e "${GREEN}✅ xG Parameter Fitter Handler deployed${NC}"
-echo -e "${YELLOW}  ℹ Run ./scripts/create_xg_fitter_schedule.sh ${ENVIRONMENT} to install the weekly EventBridge trigger${NC}"
+echo -e "${GREEN}✅ SoT Parameter Fitter Handler deployed${NC}"
+echo -e "${YELLOW}  ℹ Configure a weekly EventBridge rule to invoke football-sot-parameter-fitter-${ENVIRONMENT}${NC}"
 echo ""
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
@@ -441,7 +440,7 @@ echo "  6. football-team-parameter-handler-${ENVIRONMENT} (python3.13 + scipy-la
 echo "  7. football-team-parameter-dispatcher-${ENVIRONMENT} (python3.13 + scipy-layer)"
 echo "  8. football-match-data-handler-${ENVIRONMENT} (python3.13 + scipy-layer)"
 echo "  9. football-genai-pundit-${ENVIRONMENT} (python3.11 + llm-layer:1 ONLY)"
-echo " 10. football-xg-parameter-fitter-${ENVIRONMENT} (python3.13 + scipy-layer) — V2 weekly fit"
+echo " 10. football-sot-parameter-fitter-${ENVIRONMENT} (python3.13 + scipy-layer) — V3 weekly fit"
 echo ""
 
 echo -e "${YELLOW}Verify Deployment:${NC}"

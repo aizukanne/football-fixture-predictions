@@ -1,18 +1,19 @@
-"""Weekly xG parameter fitter lambda.
+"""Weekly SoT parameter fitter lambda (V3).
 
-Triggered by EventBridge rule `football-xg-parameter-weekly-prod`
-(Wednesdays at 04:00 UTC, after V1 team-parameter fit at 03:00).
-
-Iterates over every league in leagues.py, resolves its current season
-via /leagues?current=true, then invokes the xG fitter to read from
-football_match_statistics_prod and write to football_team_xg_parameters_prod
-and football_league_xg_parameters_prod.
+Triggered by EventBridge (configured in the deploy script). Iterates over
+every league in leagues.py, resolves its current season via
+/leagues?current=true, then invokes the V3 SoT fitter to read from
+football_match_statistics_prod + football_game_fixtures_prod and write
+to football_team_sot_parameters_prod / football_league_sot_parameters_prod.
 
 Per-league failures are isolated so one bad league doesn't block the rest.
 
-Supports manual invocation for a single league:
+Manual invocation for a single league:
     {"league_id": 39, "season": 2025}
 If `season` is omitted, it's resolved via the API.
+
+SQS-style invocation also supported (same shape as the V2 handler) for
+parity with the existing dispatch infra.
 """
 
 from __future__ import annotations
@@ -22,12 +23,12 @@ import traceback
 from datetime import datetime, timezone
 
 from ..data.api_client import get_league_start_date
-from ..parameters.xg_fitter import run_fit_for_league
+from ..parameters.sot_fitter import run_fit_for_league
 from leagues import allLeagues
 
 
 def _resolve_season(league_id: int) -> int | None:
-    """Return the 4-digit year of the current season for `league_id`, or
+    """Return the 4-digit year of the current season for league_id, or
     None if the API couldn't resolve it.
     """
     try:
@@ -53,16 +54,16 @@ def _all_leagues() -> list[dict]:
 
 
 def lambda_handler(event, context):
-    """Main entry point. Event shape:
+    """Main entry point. Event shapes:
 
-    - EventBridge scheduled: empty dict {} → fits every league in leagues.py.
-    - Manual single-league: {"league_id": N, "season": YYYY (optional)}.
+    - EventBridge scheduled (default): empty {} -> fits every league.
+    - Manual single league: {"league_id": N, "season": YYYY (optional)}.
     - SQS-dispatched: {"Records": [...]} with one message per league.
     """
     started_at = datetime.now(timezone.utc)
-    print(f"xG parameter fitter starting at {started_at.isoformat()}")
+    print(f"SoT parameter fitter starting at {started_at.isoformat()}")
 
-    # SQS-style invocation (per-league dispatch)
+    # SQS-style invocation (per-league dispatch).
     if isinstance(event, dict) and event.get("Records"):
         summaries = []
         for rec in event["Records"]:
@@ -85,7 +86,7 @@ def lambda_handler(event, context):
                 })
         return _wrap(started_at, summaries)
 
-    # Single-league direct invocation
+    # Single-league direct invocation.
     if isinstance(event, dict) and event.get("league_id"):
         lid = int(event["league_id"])
         season = event.get("season") or _resolve_season(lid)
@@ -96,9 +97,9 @@ def lambda_handler(event, context):
             }])
         return _wrap(started_at, [run_fit_for_league(lid, int(season))])
 
-    # Default: fit all leagues in leagues.py
+    # Default: fit all leagues from leagues.py.
     leagues = _all_leagues()
-    print(f"Fitting xG params for {len(leagues)} leagues")
+    print(f"Fitting SoT params for {len(leagues)} leagues")
     summaries = []
     for lg in leagues:
         lid = lg["league_id"]
@@ -129,7 +130,7 @@ def lambda_handler(event, context):
 def _wrap(started_at: datetime, summaries: list[dict]) -> dict:
     completed_at = datetime.now(timezone.utc)
     ok = sum(1 for s in summaries if s.get("status") == "ok")
-    no_data = sum(1 for s in summaries if s.get("status") == "no_data")
+    no_data = sum(1 for s in summaries if s.get("status") in ("no_data", "no_finished_fixtures"))
     err = sum(1 for s in summaries if s.get("status") == "error")
     payload = {
         "started_at": started_at.isoformat(),

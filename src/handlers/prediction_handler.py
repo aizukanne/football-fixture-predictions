@@ -14,16 +14,14 @@ from ..prediction.prediction_engine import (
     calculate_base_lambda,
     create_prediction_summary_dict
 )
-from ..prediction.xg_engine import (
-    calculate_coordinated_predictions_xg,
-    create_xg_prediction_summary_dict,
+from ..prediction.sot_engine import (
+    calculate_predictions_sot,
+    create_sot_prediction_summary_dict,
 )
-from ..data.xg_data_access import (
-    get_team_xg_params,
-    get_league_xg_params,
-    fetch_team_xg_arrays,
-    league_params_as_team_shape,
-    aggregate_data_quality,
+from ..data.sot_data_access import (
+    get_team_sot_params,
+    get_league_sot_params,
+    league_params_as_team_fallback,
 )
 from ..data.api_client import (
     get_team_statistics,
@@ -439,155 +437,91 @@ def process_fixtures(fixtures):
                 print(f"Venue-specific predictions not available for fixture {fixture_id}: insufficient venue-filtered data")
 
             # =================================================================
-            # V2 XG-BASED PREDICTION CALCULATION (4 VARIANTS)
-            # Runs in parallel with V1. Wrapped so any V2 failure is isolated
-            # from V1 outputs. See docs/v2/07-engine-integration.md.
+            # V3 SoT-BASED PREDICTION
+            # Runs in parallel with V1. V1 remains primary; V3 is the
+            # alternate (stored as sot_* attributes / sot_predictions).
+            # Wrapped so any V3 failure is isolated from V1 outputs.
+            # See docs/v3/README.md.
             # =================================================================
-            xg_prediction_summary = None
-            xg_alternate_prediction_summary = None
-            xg_venue_prediction_summary = None
-            xg_venue_alternate_prediction_summary = None
-            xg_coordination_info = {"v2_enabled": False}
-            xg_data_quality = "unavailable"
+            sot_prediction_summary = None
+            sot_coordination_info = {"v3_enabled": False}
+            sot_data_quality = "unavailable"
 
             try:
-                print("=== CALCULATING V2 XG PREDICTIONS (4 VARIANTS) ===")
-                league_xg_params = get_league_xg_params(league_id)
-                if not league_xg_params:
+                print("=== CALCULATING V3 SoT PREDICTIONS ===")
+                league_sot_params = get_league_sot_params(league_id)
+                if not league_sot_params:
                     raise RuntimeError(
-                        f"No league xG params for league {league_id}; "
-                        f"run football-xg-parameter-fitter-prod."
+                        f"No league SoT params for league {league_id}; "
+                        f"run football-sot-parameter-fitter-prod."
                     )
 
-                team_xg_params_home = get_team_xg_params(home_team_id, league_id)
-                team_xg_params_away = get_team_xg_params(away_team_id, league_id)
-                league_shaped_priors = league_params_as_team_shape(league_xg_params)
+                team_sot_home = get_team_sot_params(home_team_id, league_id)
+                team_sot_away = get_team_sot_params(away_team_id, league_id)
 
-                # Team prior fallback: if a team has no fit yet, use league averages
-                effective_team_priors_home = team_xg_params_home or league_shaped_priors
-                effective_team_priors_away = team_xg_params_away or league_shaped_priors
+                # Cold-start fallback: a team with no fitted record uses
+                # league-average values shaped to look like a team record.
+                fallback = league_params_as_team_fallback(league_sot_params)
+                effective_home = team_sot_home or fallback
+                effective_away = team_sot_away or fallback
 
-                # Pull per-match xG arrays for both teams. These are the V2
-                # observation channel — analogous to V1's per-match goal arrays.
-                home_arrays = fetch_team_xg_arrays(home_team_id, league_id, season, venue=None)
-                away_arrays = fetch_team_xg_arrays(away_team_id, league_id, season, venue=None)
-                home_arrays_venue = fetch_team_xg_arrays(home_team_id, league_id, season, venue='home')
-                away_arrays_venue = fetch_team_xg_arrays(away_team_id, league_id, season, venue='away')
-
-                def _run(home_xgf, home_xga, away_xgf, away_xga, h_priors, a_priors, venue_mode):
-                    return calculate_coordinated_predictions_xg(
-                        home_xg_for_array=home_xgf,
-                        home_xg_against_array=home_xga,
-                        away_xg_for_array=away_xgf,
-                        away_xg_against_array=away_xga,
-                        home_priors=h_priors, away_priors=a_priors,
-                        league_params=league_xg_params,
-                        league_id=league_id, season=season,
-                        home_team_id=home_team_id, away_team_id=away_team_id,
-                        prediction_date=date_dt, venue_mode=venue_mode,
-                    )
-
-                # --- V2a: league priors + pooled per-match arrays ---
-                (h_sp_v2a, h_pg_v2a, h_lh_v2a, h_probs_v2a,
-                 a_sp_v2a, a_pg_v2a, a_lh_v2a, a_probs_v2a,
-                 info_v2a) = _run(
-                    home_arrays['xg_for'], home_arrays['xg_against'],
-                    away_arrays['xg_for'], away_arrays['xg_against'],
-                    league_shaped_priors, league_shaped_priors,
-                    venue_mode=False,
-                )
-                home_team_stats['xg_probability_to_score'] = Decimal(str(h_sp_v2a))
-                away_team_stats['xg_probability_to_score'] = Decimal(str(a_sp_v2a))
-                home_team_stats['xg_predicted_goals'] = int(h_pg_v2a)
-                away_team_stats['xg_predicted_goals'] = int(a_pg_v2a)
-                home_team_stats['xg_likelihood'] = Decimal(str(h_lh_v2a))
-                away_team_stats['xg_likelihood'] = Decimal(str(a_lh_v2a))
-                xg_prediction_summary = create_xg_prediction_summary_dict(
-                    h_probs_v2a, a_probs_v2a, h_pg_v2a, a_pg_v2a)
-
-                # --- V2b: team priors + pooled per-match arrays ---
-                (h_sp_v2b, h_pg_v2b, h_lh_v2b, h_probs_v2b,
-                 a_sp_v2b, a_pg_v2b, a_lh_v2b, a_probs_v2b,
-                 info_v2b) = _run(
-                    home_arrays['xg_for'], home_arrays['xg_against'],
-                    away_arrays['xg_for'], away_arrays['xg_against'],
-                    effective_team_priors_home, effective_team_priors_away,
-                    venue_mode=False,
-                )
-                home_team_stats['xg_probability_to_score_alt'] = Decimal(str(h_sp_v2b))
-                away_team_stats['xg_probability_to_score_alt'] = Decimal(str(a_sp_v2b))
-                home_team_stats['xg_predicted_goals_alt'] = int(h_pg_v2b)
-                away_team_stats['xg_predicted_goals_alt'] = int(a_pg_v2b)
-                home_team_stats['xg_likelihood_alt'] = Decimal(str(h_lh_v2b))
-                away_team_stats['xg_likelihood_alt'] = Decimal(str(a_lh_v2b))
-                xg_alternate_prediction_summary = create_xg_prediction_summary_dict(
-                    h_probs_v2b, a_probs_v2b, h_pg_v2b, a_pg_v2b)
-
-                # --- V2c: league priors + venue-filtered per-match arrays ---
-                (h_sp_v2c, h_pg_v2c, h_lh_v2c, h_probs_v2c,
-                 a_sp_v2c, a_pg_v2c, a_lh_v2c, a_probs_v2c,
-                 info_v2c) = _run(
-                    home_arrays_venue['xg_for'], home_arrays_venue['xg_against'],
-                    away_arrays_venue['xg_for'], away_arrays_venue['xg_against'],
-                    league_shaped_priors, league_shaped_priors,
-                    venue_mode=True,
-                )
-                home_team_stats['xg_probability_to_score_venue'] = Decimal(str(h_sp_v2c))
-                away_team_stats['xg_probability_to_score_venue'] = Decimal(str(a_sp_v2c))
-                home_team_stats['xg_predicted_goals_venue'] = int(h_pg_v2c)
-                away_team_stats['xg_predicted_goals_venue'] = int(a_pg_v2c)
-                home_team_stats['xg_likelihood_venue'] = Decimal(str(h_lh_v2c))
-                away_team_stats['xg_likelihood_venue'] = Decimal(str(a_lh_v2c))
-                xg_venue_prediction_summary = create_xg_prediction_summary_dict(
-                    h_probs_v2c, a_probs_v2c, h_pg_v2c, a_pg_v2c)
-
-                # --- V2d: team priors + venue-filtered per-match arrays ---
-                (h_sp_v2d, h_pg_v2d, h_lh_v2d, h_probs_v2d,
-                 a_sp_v2d, a_pg_v2d, a_lh_v2d, a_probs_v2d,
-                 info_v2d) = _run(
-                    home_arrays_venue['xg_for'], home_arrays_venue['xg_against'],
-                    away_arrays_venue['xg_for'], away_arrays_venue['xg_against'],
-                    effective_team_priors_home, effective_team_priors_away,
-                    venue_mode=True,
-                )
-                home_team_stats['xg_probability_to_score_venue_alt'] = Decimal(str(h_sp_v2d))
-                away_team_stats['xg_probability_to_score_venue_alt'] = Decimal(str(a_sp_v2d))
-                home_team_stats['xg_predicted_goals_venue_alt'] = int(h_pg_v2d)
-                away_team_stats['xg_predicted_goals_venue_alt'] = int(a_pg_v2d)
-                home_team_stats['xg_likelihood_venue_alt'] = Decimal(str(h_lh_v2d))
-                away_team_stats['xg_likelihood_venue_alt'] = Decimal(str(a_lh_v2d))
-                xg_venue_alternate_prediction_summary = create_xg_prediction_summary_dict(
-                    h_probs_v2d, a_probs_v2d, h_pg_v2d, a_pg_v2d)
-
-                # Reflect the reliability of the team-specific priors (V2b/V2d).
-                xg_data_quality = aggregate_data_quality(
-                    effective_team_priors_home, effective_team_priors_away,
+                (h_sp_v3, h_pg_v3, h_lh_v3, h_probs_v3,
+                 a_sp_v3, a_pg_v3, a_lh_v3, a_probs_v3,
+                 info_v3) = calculate_predictions_sot(
+                    home_team_params=effective_home,
+                    away_team_params=effective_away,
+                    league_params=league_sot_params,
+                    league_id=league_id, season=season,
+                    home_team_id=home_team_id, away_team_id=away_team_id,
+                    prediction_date=date_dt,
                 )
 
-                xg_coordination_info = {
-                    "v2_enabled": True,
-                    "v2a": convert_floats_to_decimal(info_v2a),
-                    "v2b": convert_floats_to_decimal(info_v2b),
-                    "v2c": convert_floats_to_decimal(info_v2c),
-                    "v2d": convert_floats_to_decimal(info_v2d),
-                    "xg_engine_version": "v2-xg-2.2",
-                    "team_priors_home_source": "team" if team_xg_params_home else "league_avg",
-                    "team_priors_away_source": "team" if team_xg_params_away else "league_avg",
+                home_team_stats['sot_probability_to_score'] = Decimal(str(h_sp_v3))
+                away_team_stats['sot_probability_to_score'] = Decimal(str(a_sp_v3))
+                home_team_stats['sot_predicted_goals'] = int(h_pg_v3)
+                away_team_stats['sot_predicted_goals'] = int(a_pg_v3)
+                home_team_stats['sot_likelihood'] = Decimal(str(h_lh_v3))
+                away_team_stats['sot_likelihood'] = Decimal(str(a_lh_v3))
+
+                sot_prediction_summary = create_sot_prediction_summary_dict(
+                    h_probs_v3, a_probs_v3, h_pg_v3, a_pg_v3,
+                )
+
+                # data_quality: worst-of of the two team flags. cold_start
+                # > sparse > full (worst first). league_avg means the team
+                # had no fitted record at all (fallback path).
+                rank = {"unavailable": 0, "cold_start": 1, "league_avg": 2,
+                        "sparse": 3, "full": 4, "unknown": 0}
+                qh = effective_home.get("data_quality", "unknown")
+                qa = effective_away.get("data_quality", "unknown")
+                sot_data_quality = qh if rank.get(qh, 0) <= rank.get(qa, 0) else qa
+
+                sot_coordination_info = {
+                    "v3_enabled": True,
+                    "engine_version": info_v3.get("engine_version"),
+                    "lambda_h": info_v3.get("lambda_h"),
+                    "lambda_a": info_v3.get("lambda_a"),
+                    "conv_rate": info_v3.get("conv_rate"),
+                    "def_ratio_for_h": info_v3.get("def_ratio_for_h"),
+                    "def_ratio_for_a": info_v3.get("def_ratio_for_a"),
+                    "team_params_home_source": "team" if team_sot_home else "league_avg",
+                    "team_params_away_source": "team" if team_sot_away else "league_avg",
                 }
-                print(f"V2 xG predictions written for fixture {fixture_id} "
-                      f"(quality={xg_data_quality})")
+                print(f"V3 SoT prediction written for fixture {fixture_id} "
+                      f"(λ_H={info_v3.get('lambda_h')}, λ_A={info_v3.get('lambda_a')}, "
+                      f"quality={sot_data_quality})")
 
-            except Exception as xg_e:
-                print(f"V2 xG prediction failed for fixture {fixture_id}: {xg_e}")
+            except Exception as sot_e:
+                print(f"V3 SoT prediction failed for fixture {fixture_id}: {sot_e}")
                 import traceback
                 traceback.print_exc()
-                xg_coordination_info = {
-                    "v2_enabled": False,
-                    "v2_failed": True,
-                    "error": str(xg_e),
+                sot_coordination_info = {
+                    "v3_enabled": False,
+                    "v3_failed": True,
+                    "error": str(sot_e),
                 }
-                xg_data_quality = "unavailable"
-                # xg_*_summary vars remain None; attributes are omitted below.
+                sot_data_quality = "unavailable"
+                # sot_prediction_summary remains None; key omitted from output.
 
             # Add additional fixture data
             home_team_stats['record_id'] = f"{fixture['fixture_id']}_home_{home_team_id}"
@@ -646,12 +580,9 @@ def process_fixtures(fixtures):
                 "alternate_predictions": prediction_summary_alt,
                 "venue_predictions": venue_prediction_summary,
                 "venue_alternate_predictions": venue_prediction_summary_alt,
-                "xg_predictions": xg_prediction_summary,
-                "xg_alternate_predictions": xg_alternate_prediction_summary,
-                "xg_venue_predictions": xg_venue_prediction_summary,
-                "xg_venue_alternate_predictions": xg_venue_alternate_prediction_summary,
-                "xg_coordination_info": convert_floats_to_decimal(xg_coordination_info),
-                "xg_data_quality": xg_data_quality,
+                "sot_predictions": sot_prediction_summary,
+                "sot_coordination_info": convert_floats_to_decimal(sot_coordination_info),
+                "sot_data_quality": sot_data_quality,
                 "coordination_info": {
                     "league_coordination": convert_floats_to_decimal(league_coordination_info),
                     "team_coordination": convert_floats_to_decimal(team_coordination_info),

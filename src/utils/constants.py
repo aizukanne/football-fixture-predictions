@@ -84,20 +84,37 @@ GAME_FIXTURES_TABLE = _get_table_name('game_fixtures')
 LEAGUE_PARAMETERS_TABLE = _get_table_name('league_parameters')
 TEAM_PARAMETERS_TABLE = _get_table_name('team_parameters')
 
-# V2 xG-engine table names
+# Match-statistics source-of-truth table (per-team-per-fixture stats).
+# Populated post-match via /v3/fixtures/statistics. Used by V3 fitter.
 MATCH_STATISTICS_TABLE = _get_table_name('match_statistics')
-TEAM_XG_PARAMETERS_TABLE = _get_table_name('team_xg_parameters')
-LEAGUE_XG_PARAMETERS_TABLE = _get_table_name('league_xg_parameters')
 
-# V2 engine constants
-SOT_TO_XG_FACTOR = 0.32          # from Phase 1 analysis: global SoT->goals conversion ≈ 0.317
-XG_FORM_DECAY = 0.9              # per-match decay weight (inherits V1's form_analyzer)
-XG_SHRINKAGE_K = 10              # league-mean prior weight for small-N teams
-XG_MIN_MATCHES_FULL = 10         # below this, 'sparse' data_quality flag
-XG_BURN_IN_MATCHES = 10          # minimum history before V2 emits predictions
-XG_DEFAULT_RHO_DC = -0.18        # Dixon-Coles rho initial value (re-fit per league after 4wk)
-XG_FORM_MULT_MIN = 0.7           # clamp bounds on form multiplier
-XG_FORM_MULT_MAX = 1.3
+# V3 SoT-engine parameter tables. Recomputed weekly by the fitter lambda.
+TEAM_SOT_PARAMETERS_TABLE = _get_table_name('team_sot_parameters')
+LEAGUE_SOT_PARAMETERS_TABLE = _get_table_name('league_sot_parameters')
+
+# V3 engine constants.
+#   SOT_NB_ALPHA: dispersion for the per-team Negative Binomial. Matches
+#     legacy α=0.3 — goals are mildly overdispersed (V/M ≈ 1.06) so plain
+#     Poisson under-counts the upper tail.
+#   SOT_SHRINKAGE_K: cold-start prior weight (in pseudo-matches) for
+#     team SoT_for / goals_conceded. The team mean is shrunk toward the
+#     league mean by k / (k + n_observed). With k=5 a team needs ~5 real
+#     matches to outweigh the prior. Larger ⇒ more shrinkage.
+#   SOT_MIN_MATCHES_FULL: below this, the team's data_quality is flagged
+#     'sparse' and the engine downgrades confidence accordingly.
+#   SOT_TO_GOAL_FALLBACK: only used when a league has zero data (brand
+#     new league, no fitted params yet). The 0.317 figure is the global
+#     pooled mean across all 27 leagues we observed.
+SOT_NB_ALPHA = 0.3
+SOT_SHRINKAGE_K = 5
+SOT_MIN_MATCHES_FULL = 10
+SOT_TO_GOAL_FALLBACK = 0.317
+
+# Backwards-compat alias for match-statistics ingest path. The V2 ingester
+# used this constant to derive expected_goals from SoT when the API didn't
+# emit native xG. V3 doesn't read expected_goals at all, but the ingest
+# code still references the constant; keep it pointing at the same value.
+SOT_TO_XG_FACTOR = SOT_TO_GOAL_FALLBACK
 
 # SQS Queue URLs
 # Default queue URL - will be updated by infrastructure setup script
