@@ -50,22 +50,57 @@ class TestSmooth(unittest.TestCase):
     def test_no_observations_returns_prior(self):
         self.assertEqual(_smooth([], 1.4, prior_weight=5), 1.4)
 
-    def test_many_observations_approach_observed_mean(self):
+    def test_equal_weight_blend_proportional(self):
+        # decay=1.0 disables form decay; tests the basic Bayesian blend.
+        # 5 observations averaging 2.0 with prior 1.0 weight 5:
+        #   (1.0*5 + 2.0*5) / (5+5) = 1.5
+        result = _smooth([2.0]*5, prior_mean=1.0, prior_weight=5, decay=1.0)
+        self.assertAlmostEqual(result, 1.5, places=4)
+
+    def test_equal_weight_many_observations_approach_mean(self):
         obs = [2.0] * 100
-        result = _smooth(obs, prior_mean=1.0, prior_weight=5)
+        result = _smooth(obs, prior_mean=1.0, prior_weight=5, decay=1.0)
         # Weight on prior is 5/(5+100) ≈ 0.048; observed dominates
         self.assertGreater(result, 1.9)
         self.assertLess(result, 2.0)
 
-    def test_blend_proportional(self):
-        # 5 observations averaging 2.0 with prior 1.0 weight 5:
-        # (1.0*5 + 2.0*5) / (5+5) = 1.5
-        result = _smooth([2.0]*5, prior_mean=1.0, prior_weight=5)
-        self.assertAlmostEqual(result, 1.5, places=4)
-
-    def test_zero_prior_weight_returns_observed_mean(self):
-        result = _smooth([1.0, 2.0, 3.0], prior_mean=99.0, prior_weight=0)
+    def test_zero_prior_weight_returns_observed_mean_no_decay(self):
+        result = _smooth(
+            [1.0, 2.0, 3.0], prior_mean=99.0, prior_weight=0, decay=1.0,
+        )
         self.assertAlmostEqual(result, 2.0, places=4)
+
+    def test_form_decay_upweights_recent(self):
+        # Observations are most-recent-first. Hot recent form (2.5) with
+        # cold older form (0.5) should yield a smoothed value above the
+        # plain mean of 1.5.
+        result_decay = _smooth(
+            [2.5, 2.5, 2.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            prior_mean=1.5, prior_weight=0, decay=0.9,
+        )
+        result_equal = _smooth(
+            [2.5, 2.5, 2.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+            prior_mean=1.5, prior_weight=0, decay=1.0,
+        )
+        self.assertAlmostEqual(result_equal, 1.25, places=4)
+        self.assertGreater(result_decay, result_equal)
+        self.assertGreater(result_decay, 1.4)
+
+    def test_form_decay_effective_n_caps(self):
+        # With decay=0.9, ∑decay^i for n=∞ = 1/(1-0.9) = 10.
+        # 100 identical observations should still leave the prior with
+        # weight ~5/(5+10) ≈ 33% (vs ~5% under equal weighting).
+        result = _smooth(
+            [2.0] * 100, prior_mean=1.0, prior_weight=5, decay=0.9,
+        )
+        # Expected: (1.0*5 + 2.0*10) / (5+10) ≈ 1.667
+        self.assertAlmostEqual(result, 1.667, places=2)
+
+    def test_form_decay_invalid_value_raises(self):
+        with self.assertRaises(ValueError):
+            _smooth([1.0], prior_mean=1.0, decay=0.0)
+        with self.assertRaises(ValueError):
+            _smooth([1.0], prior_mean=1.0, decay=1.5)
 
 
 class TestDcTau(unittest.TestCase):
@@ -142,8 +177,33 @@ class TestCalculateCoordinated(unittest.TestCase):
         # Strong vs weak: home should have higher score probability
         self.assertGreater(h_sp, a_sp)
         # coordination_info present
-        self.assertEqual(info["engine_version"], "v2-xg-2.0")
+        self.assertEqual(info["engine_version"], "v2-xg-2.1")
         self.assertIn("lambda_H", info)
+        # predicted_goals = round(λ), not argmax of marginal PMF
+        self.assertEqual(h_pg, max(0, round(info["lambda_H"])))
+        self.assertEqual(a_pg, max(0, round(info["lambda_A"])))
+
+    def test_predicted_goals_is_round_of_lambda(self):
+        """round(λ) preserves the difference between weak and strong attacks
+        that the marginal mode would collapse to '1' for any λ in [1, 2)."""
+        league = self._league()
+        priors = {"mu_xg_for": Decimal("1.4"), "mu_xg_against": Decimal("1.4"),
+                  "data_quality": "full"}
+
+        # Strong home team (xG_for ≈ 2.4 in observations) → λ_H likely ≥ 1.5
+        result = calculate_coordinated_predictions_xg(
+            home_xg_for_array=[2.4]*15, home_xg_against_array=[0.6]*15,
+            away_xg_for_array=[0.7]*15, away_xg_against_array=[2.3]*15,
+            home_priors=priors, away_priors=priors, league_params=league,
+        )
+        info = result[8]
+        h_pg = result[1]
+        a_pg = result[5]
+        self.assertGreater(info["lambda_H"], 1.5)
+        # round(λ_H) for λ_H > 1.5 → at least 2
+        self.assertGreaterEqual(h_pg, 2)
+        # round(λ_A) for typical low away λ → 0 or 1
+        self.assertLessEqual(a_pg, 1)
 
     def test_per_match_observations_drive_prediction(self):
         """The same priors but different observation arrays should yield

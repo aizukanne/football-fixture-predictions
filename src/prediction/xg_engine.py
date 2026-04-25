@@ -45,6 +45,7 @@ from ..statistics.distributions import squash_lambda
 from ..utils.constants import (
     MAX_GOALS_ANALYSIS,
     XG_DEFAULT_RHO_DC,
+    XG_FORM_DECAY,
 )
 
 
@@ -64,18 +65,48 @@ def _smooth(
     observations: Sequence[float],
     prior_mean: float,
     prior_weight: float = DEFAULT_PRIOR_WEIGHT,
+    decay: float = XG_FORM_DECAY,
 ) -> float:
-    """Bayesian-smooth a list of observations toward a prior mean.
+    """Bayesian-smooth a list of observations toward a prior mean, with
+    geometric form decay so recent matches count more than older ones.
 
-    Returns (prior_mean × prior_weight + sum(obs)) / (prior_weight + n_obs).
-    With no observations, returns the prior mean.
-    With many observations, approaches the observed mean.
+    `observations` must be ordered MOST-RECENT-FIRST (which is what
+    `fetch_team_xg_arrays` returns). Each observation gets weight
+    `decay^i` where i is its index — i=0 (newest) → 1.0, i=1 → decay,
+    i=2 → decay², etc.
+
+    Equal-weighting (legacy behaviour) is recovered by passing decay=1.0.
+
+    Formula:
+        smoothed = (prior_mean × prior_weight + Σ wᵢ × xᵢ)
+                 / (prior_weight + Σ wᵢ)
+    where wᵢ = decay^i.
+
+    With decay=0.9 the effective sample size caps at 1/(1-0.9) = 10,
+    so the prior keeps a meaningful voice even for teams with 30+
+    matches. That's intentional: form decay both up-weights recency
+    AND humbles the team estimate, which prevents over-fitting to
+    long-stale form.
     """
     obs = [float(v) for v in observations if v is not None]
     n = len(obs)
-    if prior_weight <= 0 and n == 0:
+    if n == 0:
         return float(prior_mean)
-    return (float(prior_mean) * prior_weight + sum(obs)) / (prior_weight + n)
+    if decay <= 0 or decay > 1:
+        raise ValueError(f"decay must be in (0, 1], got {decay}")
+
+    if decay == 1.0:
+        weighted_sum = sum(obs)
+        weighted_n = float(n)
+    else:
+        weights = [decay ** i for i in range(n)]
+        weighted_sum = sum(o * w for o, w in zip(obs, weights))
+        weighted_n = sum(weights)
+
+    denom = prior_weight + weighted_n
+    if denom <= 0:
+        return float(prior_mean)
+    return (float(prior_mean) * prior_weight + weighted_sum) / denom
 
 
 # --------------------------------------------------------------------------
@@ -294,13 +325,20 @@ def calculate_coordinated_predictions_xg(
 
     home_score_prob = 1.0 - home_probs.get(0, 0.0)
     away_score_prob = 1.0 - away_probs.get(0, 0.0)
-    home_predicted_goals = max(home_probs, key=home_probs.get)
-    away_predicted_goals = max(away_probs, key=away_probs.get)
-    home_likelihood = home_probs[home_predicted_goals]
-    away_likelihood = away_probs[away_predicted_goals]
+
+    # predicted_goals = round(λ), not argmax of the marginal PMF.
+    # The marginal *mode* of Poisson(λ) for any 1 ≤ λ < 2 is exactly 1,
+    # which collapses every fixture in the typical 1.0–1.7 range to "1".
+    # round(λ) preserves the difference between λ=1.1 (truly cold) and
+    # λ=1.7 (genuinely strong), giving 1 vs 2 instead of 1 vs 1.
+    # Likelihood is the marginal probability AT that rounded value.
+    home_predicted_goals = max(0, min(MAX_GOALS_ANALYSIS, int(round(lambda_H))))
+    away_predicted_goals = max(0, min(MAX_GOALS_ANALYSIS, int(round(lambda_A))))
+    home_likelihood = home_probs.get(home_predicted_goals, 0.0)
+    away_likelihood = away_probs.get(away_predicted_goals, 0.0)
 
     coordination_info: Dict[str, Any] = {
-        "engine_version": "v2-xg-2.0",
+        "engine_version": "v2-xg-2.1",
         "lambda_H": round(lambda_H, 4),
         "lambda_A": round(lambda_A, 4),
         "n_obs_home_for": len(home_xg_for_array or ()),

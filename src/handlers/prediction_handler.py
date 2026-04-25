@@ -565,7 +565,7 @@ def process_fixtures(fixtures):
                     "v2b": convert_floats_to_decimal(info_v2b),
                     "v2c": convert_floats_to_decimal(info_v2c),
                     "v2d": convert_floats_to_decimal(info_v2d),
-                    "xg_engine_version": "v2-xg-2.0",
+                    "xg_engine_version": "v2-xg-2.1",
                     "team_priors_home_source": "team" if team_xg_params_home else "league_avg",
                     "team_priors_away_source": "team" if team_xg_params_away else "league_avg",
                 }
