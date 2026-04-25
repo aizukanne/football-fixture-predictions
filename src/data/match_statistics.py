@@ -90,17 +90,32 @@ class FixtureMeta:
     """Minimal context required to build a match_statistics item.
 
     Any source that knows this about the fixture can produce items.
+
+    home_goals / away_goals are optional: the /v3/fixtures/statistics
+    endpoint does not return goals, so callers must source them from
+    /v3/fixtures (or from the goal_data dict already in match_data_handler)
+    and pass them in. When None, build_team_item omits the goals_scored /
+    goals_conceded fields rather than fabricating zeros.
     """
 
-    __slots__ = ("league_id", "season", "match_date", "home_team_id", "away_team_id")
+    __slots__ = (
+        "league_id", "season", "match_date",
+        "home_team_id", "away_team_id",
+        "home_goals", "away_goals",
+    )
 
-    def __init__(self, league_id: int, season: int, match_date: str,
-                 home_team_id: int, away_team_id: int):
+    def __init__(
+        self, league_id: int, season: int, match_date: str,
+        home_team_id: int, away_team_id: int,
+        home_goals: Optional[int] = None, away_goals: Optional[int] = None,
+    ):
         self.league_id = int(league_id)
         self.season = int(season)
         self.match_date = str(match_date)
         self.home_team_id = int(home_team_id)
         self.away_team_id = int(away_team_id)
+        self.home_goals = None if home_goals is None else int(home_goals)
+        self.away_goals = None if away_goals is None else int(away_goals)
 
 
 def build_team_item(
@@ -154,6 +169,17 @@ def build_team_item(
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "expected_goals": _to_decimal(expected_goals),
     }
+
+    # Goals scored/conceded are sourced from /v3/fixtures (passed in via
+    # FixtureMeta) since the statistics endpoint doesn't return them.
+    # Omit silently when caller couldn't supply them — never fabricate.
+    if fixture_meta.home_goals is not None and fixture_meta.away_goals is not None:
+        if is_home:
+            item["goals_scored"] = int(fixture_meta.home_goals)
+            item["goals_conceded"] = int(fixture_meta.away_goals)
+        else:
+            item["goals_scored"] = int(fixture_meta.away_goals)
+            item["goals_conceded"] = int(fixture_meta.home_goals)
 
     for k in INT_FIELDS:
         v = parsed.get(k)

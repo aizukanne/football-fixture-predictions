@@ -237,11 +237,18 @@ def process_league_fixtures(league_id, league_name, country, goals_dict, db_reco
     }
 
 
-def _extract_fixture_meta(fixture_id, db_record):
-    """Pull the (league_id, season, date, home_team_id, away_team_id) tuple
-    from a game_fixtures DynamoDB record so we can build a FixtureMeta.
+def _extract_fixture_meta(fixture_id, db_record, goal_data=None):
+    """Pull the fixture context needed to build a FixtureMeta.
 
-    Returns None if any required field is missing.
+    Args:
+        fixture_id: Fixture identifier (for error logging only).
+        db_record: game_fixtures item with league/season/date/team ids.
+        goal_data: Optional goals dict from /v3/fixtures with 'home' and
+            'away' keys. The /fixtures/statistics endpoint does NOT return
+            goals, so we plumb them in here from the same /fixtures call
+            that drove the score-update.
+
+    Returns None if any of the core (non-goals) fields are missing.
     """
     if not db_record:
         return None
@@ -257,12 +264,29 @@ def _extract_fixture_meta(fixture_id, db_record):
         if None in (league_id, season, match_date, home_team_id, away_team_id):
             return None
 
+        # Goals: prefer fresh goal_data from the API; fall back to the
+        # db_record's previously-stored goals for compatibility with
+        # callers that don't pass goal_data.
+        home_goals = None
+        away_goals = None
+        if goal_data:
+            home_goals = goal_data.get('home')
+            away_goals = goal_data.get('away')
+        if home_goals is None or away_goals is None:
+            stored = db_record.get('goals') or {}
+            if home_goals is None:
+                home_goals = stored.get('home')
+            if away_goals is None:
+                away_goals = stored.get('away')
+
         return FixtureMeta(
             league_id=int(league_id),
             season=int(season),
             match_date=str(match_date),
             home_team_id=int(home_team_id),
             away_team_id=int(away_team_id),
+            home_goals=None if home_goals is None else int(home_goals),
+            away_goals=None if away_goals is None else int(away_goals),
         )
     except (TypeError, ValueError, KeyError) as e:
         print(f"Could not build FixtureMeta for fixture {fixture_id}: {e}")
@@ -310,7 +334,9 @@ def collect_enhanced_match_data(fixture_id, goal_data, db_record=None):
         }
 
         # V2 ingestion: write 18-field per-team rows to match_statistics.
-        fixture_meta = _extract_fixture_meta(fixture_id, db_record)
+        # Pass goal_data so FixtureMeta can include goals_scored /
+        # goals_conceded — the /fixtures/statistics endpoint doesn't.
+        fixture_meta = _extract_fixture_meta(fixture_id, db_record, goal_data=goal_data)
         if fixture_meta is None:
             print(f"V2 stats skipped for fixture {fixture_id}: no FixtureMeta")
             enhanced_data['v2_stats_ingestion'] = {
