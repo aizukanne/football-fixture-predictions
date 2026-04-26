@@ -67,9 +67,21 @@ class DataFormatter:
             len(item.get('best_bet', [])) > 0
         )
 
-        # V1-only sourcing.
-        #   predicted_goals      <- home.predicted_goals      (V1, league-params variant)
-        #   predicted_goals_alt  <- home.predicted_goals_alt  (V1, team-params variant)
+        # Both fields surface V1 league-params predictions; the difference is
+        # in the *match data* feeding them and whether the home_adv
+        # multiplier is applied.
+        #
+        #   predicted_goals      <- home.predicted_goals        (pri)
+        #     V1 league-params, all-matches data, home_adv applied.
+        #
+        #   predicted_goals_alt  <- home.predicted_goals_venue  (ven)
+        #     V1 league-params, venue-filtered match data, home_adv
+        #     skipped (the venue effect is already baked into the data).
+        #
+        # Empirically (eval on 2026-04-25 across 19 leagues with n>=3),
+        # ven matches or beats pri on direction in every league and beats
+        # it outright in half of them — most decisively in lower-tier
+        # European leagues where the home_adv multiplier was over-correcting.
         home_data = item.get('home', {})
         away_data = item.get('away', {})
 
@@ -78,7 +90,7 @@ class DataFormatter:
             'team_name': home_data.get('team_name'),
             'team_logo': home_data.get('team_logo'),
             'predicted_goals': self._safe_decimal_convert(home_data.get('predicted_goals')),
-            'predicted_goals_alt': self._safe_decimal_convert(home_data.get('predicted_goals_alt')),
+            'predicted_goals_alt': self._safe_decimal_convert(home_data.get('predicted_goals_venue')),
             'home_performance': self._safe_decimal_convert(home_data.get('home_performance'))
         }
 
@@ -87,7 +99,7 @@ class DataFormatter:
             'team_name': away_data.get('team_name'),
             'team_logo': away_data.get('team_logo'),
             'predicted_goals': self._safe_decimal_convert(away_data.get('predicted_goals')),
-            'predicted_goals_alt': self._safe_decimal_convert(away_data.get('predicted_goals_alt')),
+            'predicted_goals_alt': self._safe_decimal_convert(away_data.get('predicted_goals_venue')),
             'away_performance': self._safe_decimal_convert(away_data.get('away_performance'))
         }
 
