@@ -275,15 +275,20 @@ def process_single_league(league, force_recompute=False):
                 team_dict.pop('using_team_home', None)
                 team_dict.pop('using_team_away', None)
                 
-                # Read previous DB record to extract Brier EMA and k values for feedback
+                # Read previous DB record to extract Brier EMA and k values for feedback.
+                # Backwards-compat: legacy records have a single `brier_ema` (home-only
+                # tuning); seed both home and away EMAs from it on first cycle.
                 existing_params = get_team_params_from_db(team_id, league_id) or {}
-                prev_brier_ema = float(existing_params.get(
+                _legacy_ema = float(existing_params.get(
                     'brier_ema', existing_params.get('brier', 0.25)))
+                prev_brier_ema_home = float(existing_params.get('brier_ema_home', _legacy_ema))
+                prev_brier_ema_away = float(existing_params.get('brier_ema_away', _legacy_ema))
 
-                # Reset Brier EMA when architecture version changes (formula recalibration)
+                # Reset both Brier EMAs when architecture version changes (formula recalibration)
                 existing_version = existing_params.get('architecture_version', '6.0')
                 if existing_version != CURRENT_ARCHITECTURE_VERSION:
-                    prev_brier_ema = 0.25
+                    prev_brier_ema_home = 0.25
+                    prev_brier_ema_away = 0.25
                     print(f"Brier EMA reset for {team_name}: version change {existing_version} -> {CURRENT_ARCHITECTURE_VERSION}")
 
                 # Tune weights if we have enough data
@@ -296,46 +301,81 @@ def process_single_league(league, force_recompute=False):
                     )
                     team_dict.update(tune_results)
 
-                    # Apply Brier EMA feedback: adjust k values based on team's
-                    # accumulated prediction quality relative to the league average
-                    league_brier = float(league_params.get('brier', 0.25))
-                    new_brier_ema = update_brier_ema(
-                        current_brier=float(team_dict['brier']),
-                        prev_brier_ema=prev_brier_ema,
+                    # Apply Brier EMA feedback per side. Each side's k is tuned
+                    # by its own Brier — a team's home k is adjusted by how well
+                    # we predicted that team's home scoring; same for away.
+                    league_brier_home = float(league_params.get(
+                        'brier_home', league_params.get('brier', 0.25)))
+                    league_brier_away = float(league_params.get(
+                        'brier_away', league_params.get('brier', 0.25)))
+
+                    new_ema_home = update_brier_ema(
+                        current_brier=float(team_dict['brier_home']),
+                        prev_brier_ema=prev_brier_ema_home,
                     )
-                    feedback = compute_k_adjustment(
-                        brier_ema=new_brier_ema,
-                        league_brier=league_brier,
-                        base_k_goals=team_dict['k_goals'],
-                        base_k_score=team_dict['k_score'],
+                    new_ema_away = update_brier_ema(
+                        current_brier=float(team_dict['brier_away']),
+                        prev_brier_ema=prev_brier_ema_away,
+                    )
+                    feedback_home = compute_k_adjustment(
+                        brier_ema=new_ema_home,
+                        league_brier=league_brier_home,
+                        base_k_goals=team_dict['k_goals_home'],
+                        base_k_score=team_dict['k_score_home'],
+                        games_played=team_games,
+                    )
+                    feedback_away = compute_k_adjustment(
+                        brier_ema=new_ema_away,
+                        league_brier=league_brier_away,
+                        base_k_goals=team_dict['k_goals_away'],
+                        base_k_score=team_dict['k_score_away'],
                         games_played=team_games,
                     )
                     team_dict.update({
-                        'brier_ema':          new_brier_ema,
-                        'k_goals':            feedback['k_goals'],
-                        'k_score':            feedback['k_score'],
-                        'goal_prior_weight':  feedback['k_goals'],
-                        'score_prior_weight': feedback['k_score'],
-                        'k_feedback_step':    feedback['k_feedback_step'],
-                        'k_feedback_reason':  feedback['k_feedback_reason'],
+                        'brier_ema_home':           new_ema_home,
+                        'brier_ema_away':           new_ema_away,
+                        'k_goals_home':             feedback_home['k_goals'],
+                        'k_score_home':             feedback_home['k_score'],
+                        'goal_prior_weight_home':   feedback_home['k_goals'],
+                        'score_prior_weight_home':  feedback_home['k_score'],
+                        'k_feedback_step_home':     feedback_home['k_feedback_step'],
+                        'k_feedback_reason_home':   feedback_home['k_feedback_reason'],
+                        'k_goals_away':             feedback_away['k_goals'],
+                        'k_score_away':             feedback_away['k_score'],
+                        'goal_prior_weight_away':   feedback_away['k_goals'],
+                        'score_prior_weight_away':  feedback_away['k_score'],
+                        'k_feedback_step_away':     feedback_away['k_feedback_step'],
+                        'k_feedback_reason_away':   feedback_away['k_feedback_reason'],
                     })
                     print(
-                        f"Brier feedback for {team_name}: ema={new_brier_ema:.4f} "
-                        f"vs league={league_brier:.4f}, step={feedback['k_feedback_step']} "
-                        f"({feedback['k_feedback_reason']})"
+                        f"Brier feedback for {team_name}: "
+                        f"home ema={new_ema_home:.4f} vs lg={league_brier_home:.4f} "
+                        f"step={feedback_home['k_feedback_step']}({feedback_home['k_feedback_reason']}) | "
+                        f"away ema={new_ema_away:.4f} vs lg={league_brier_away:.4f} "
+                        f"step={feedback_away['k_feedback_step']}({feedback_away['k_feedback_reason']})"
                     )
                 else:
-                    # Use league parameter values; carry forward EMA unchanged
+                    # Use league parameter values; carry forward EMAs unchanged.
                     print(f"Using league weight parameters for team {team_name}")
+                    lg_kg_home = league_params.get('k_goals_home', league_params.get('k_goals', 3))
+                    lg_ks_home = league_params.get('k_score_home', league_params.get('k_score', 4))
+                    lg_kg_away = league_params.get('k_goals_away', league_params.get('k_goals', 3))
+                    lg_ks_away = league_params.get('k_score_away', league_params.get('k_score', 4))
+                    lg_brier_home = league_params.get('brier_home', league_params.get('brier', 0.1))
+                    lg_brier_away = league_params.get('brier_away', league_params.get('brier', 0.1))
                     team_dict.update({
-                        'k_goals': league_params.get('k_goals', 3),
-                        'k_score': league_params.get('k_score', 4),
-                        'goal_prior_weight': league_params.get('goal_prior_weight', 3),
-                        'score_prior_weight': league_params.get('score_prior_weight', 4),
-                        'brier': league_params.get('brier', 0.1),
-                        'brier_ema': prev_brier_ema,
-                        'k_feedback_step': 0,
-                        'k_feedback_reason': 'insufficient_games',
+                        'k_goals_home': lg_kg_home, 'k_score_home': lg_ks_home,
+                        'goal_prior_weight_home': lg_kg_home, 'score_prior_weight_home': lg_ks_home,
+                        'brier_home': lg_brier_home,
+                        'brier_ema_home': prev_brier_ema_home,
+                        'k_feedback_step_home': 0,
+                        'k_feedback_reason_home': 'insufficient_games',
+                        'k_goals_away': lg_kg_away, 'k_score_away': lg_ks_away,
+                        'goal_prior_weight_away': lg_kg_away, 'score_prior_weight_away': lg_ks_away,
+                        'brier_away': lg_brier_away,
+                        'brier_ema_away': prev_brier_ema_away,
+                        'k_feedback_step_away': 0,
+                        'k_feedback_reason_away': 'insufficient_games',
                     })
                 
                 # Calculate multipliers

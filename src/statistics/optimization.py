@@ -14,89 +14,116 @@ def tune_weights_grid(df, mu, alpha_nb, ref_games, k_grid=(np.arange(3, 9), np.a
     """
     Tune smoothing weights using grid search to optimize predictions.
     Originally from computeLeagueParameters.py.
-    
-    Args:
-        df: DataFrame with match data
-        mu: Fitted parameters dictionary
-        alpha_nb: Negative binomial alpha parameter
-        ref_games: Reference number of games
-        k_grid: Tuple of (goals_grid, score_grid) for grid search
-        defaults: Default values if optimization fails
-        
+
+    Runs the grid search **twice** — once scoring the home side
+    (P(home scores >=1) vs home_goals > 0), once scoring the away side
+    (mirror, but for the away team). The home and away k values are
+    optimised independently so the smoothing constants applied to each
+    side reflect the prediction error from that side.
+
     Returns:
-        Dictionary with optimized weights and performance metrics
+        Dictionary with side-suffixed weights and Brier scores:
+            k_goals_home, k_score_home, brier_home,
+            k_goals_away, k_score_away, brier_away,
+            goal_prior_weight_home/away, score_prior_weight_home/away.
     """
     if df.empty or len(df) < MINIMUM_GAMES_THRESHOLD:
         print("Insufficient data for weight tuning. Using defaults.")
-        return {
-            'k_goals': defaults[0],
-            'k_score': defaults[1], 
-            'goal_prior_weight': defaults[0],
-            'score_prior_weight': defaults[1],
-            'brier': 0.25  # Default Brier score
-        }
-    
+        return _default_dual_side_params(defaults)
+
     k_goals_grid, k_score_grid = k_grid
-    best_brier = float('inf')
-    best_params = None
-    
-    # Grid search over weight combinations
-    for k_goals in k_goals_grid:
-        for k_score in k_score_grid:
-            try:
-                brier_score_val = calculate_brier_score_for_weights(
-                    df, mu, alpha_nb, k_goals, k_score, ref_games
-                )
-                
-                if brier_score_val < best_brier:
-                    best_brier = brier_score_val
-                    best_params = {
-                        'k_goals': int(k_goals),
-                        'k_score': int(k_score),
-                        'goal_prior_weight': int(k_goals), 
-                        'score_prior_weight': int(k_score),
-                        'brier': float(best_brier)
-                    }
-            except Exception as e:
-                print(f"Error in weight tuning for k_goals={k_goals}, k_score={k_score}: {e}")
-                continue
-    
-    if best_params is None:
-        print("Grid search failed. Using default weights.")
-        return {
-            'k_goals': defaults[0],
-            'k_score': defaults[1],
-            'goal_prior_weight': defaults[0], 
-            'score_prior_weight': defaults[1],
-            'brier': 0.25
-        }
-    
-    print(f"Best weights found: k_goals={best_params['k_goals']}, k_score={best_params['k_score']}, brier={best_params['brier']:.4f}")
-    return best_params
+
+    def _grid_search_one_side(side: str):
+        best = float('inf')
+        chosen = None
+        for k_goals in k_goals_grid:
+            for k_score in k_score_grid:
+                try:
+                    score = calculate_brier_score_for_weights(
+                        df, mu, alpha_nb, k_goals, k_score, ref_games, side=side,
+                    )
+                    if score < best:
+                        best = score
+                        chosen = (int(k_goals), int(k_score), float(best))
+                except Exception as e:
+                    print(f"Error tuning {side} k_goals={k_goals} k_score={k_score}: {e}")
+                    continue
+        return chosen
+
+    home_pick = _grid_search_one_side("home")
+    away_pick = _grid_search_one_side("away")
+
+    if home_pick is None and away_pick is None:
+        print("Grid search failed for both sides. Using default weights.")
+        return _default_dual_side_params(defaults)
+
+    if home_pick is None:
+        home_pick = (defaults[0], defaults[1], 0.25)
+    if away_pick is None:
+        away_pick = (defaults[0], defaults[1], 0.25)
+
+    kg_h, ks_h, br_h = home_pick
+    kg_a, ks_a, br_a = away_pick
+
+    out = {
+        'k_goals_home': kg_h,
+        'k_score_home': ks_h,
+        'goal_prior_weight_home': kg_h,
+        'score_prior_weight_home': ks_h,
+        'brier_home': br_h,
+        'k_goals_away': kg_a,
+        'k_score_away': ks_a,
+        'goal_prior_weight_away': kg_a,
+        'score_prior_weight_away': ks_a,
+        'brier_away': br_a,
+    }
+    print(
+        f"Best weights — home: k_goals={kg_h} k_score={ks_h} brier={br_h:.4f} | "
+        f"away: k_goals={kg_a} k_score={ks_a} brier={br_a:.4f}"
+    )
+    return out
+
+
+def _default_dual_side_params(defaults):
+    """Default smoothing-weight dict when grid search can't run.
+
+    Symmetric: same defaults applied to home and away. Brier defaults to
+    0.25 (the no-information baseline of a binary brier).
+    """
+    kg, ks = defaults[0], defaults[1]
+    return {
+        'k_goals_home': kg, 'k_score_home': ks,
+        'goal_prior_weight_home': kg, 'score_prior_weight_home': ks,
+        'brier_home': 0.25,
+        'k_goals_away': kg, 'k_score_away': ks,
+        'goal_prior_weight_away': kg, 'score_prior_weight_away': ks,
+        'brier_away': 0.25,
+    }
 
 
 def tune_weights_grid_team(df, mu, alpha_nb, ref_games, k_grid=(np.arange(3, 9), np.arange(4, 11)), defaults=(5, 6)):
     """
     Tune smoothing weights for team-specific parameters using grid search.
     Originally from computeTeamParameters.py.
-    
-    Args:
-        df: DataFrame with team match data
-        mu: Fitted parameters dictionary  
-        alpha_nb: Negative binomial alpha parameter
-        ref_games: Reference number of games
-        k_grid: Tuple of (goals_grid, score_grid) for grid search
-        defaults: Default values if optimization fails
-        
-    Returns:
-        Dictionary with optimized weights and performance metrics
+    Same dual-side return shape as tune_weights_grid.
     """
     return tune_weights_grid(df, mu, alpha_nb, ref_games, k_grid, defaults)
 
 
-def calculate_brier_score_for_weights(df, mu, alpha_nb, k_goals, k_score, ref_games):
+def calculate_brier_score_for_weights(df, mu, alpha_nb, k_goals, k_score, ref_games, side="home"):
     """
     Calculate Brier score for given smoothing weights.
+
+    The system measures whether a team scores at all (binary), not how
+    many goals — the goal count is a byproduct.
+
+    Args:
+        side: "home" or "away".
+            "home" -> P(home scores >=1) vs home_goals > 0
+                      Smooths home_offense toward league_home_offense.
+            "away" -> P(away scores >=1) vs away_goals > 0
+                      Smooths away_offense toward league_away_offense.
+        Other args unchanged.
     
     Args:
         df: Match data DataFrame
@@ -109,41 +136,40 @@ def calculate_brier_score_for_weights(df, mu, alpha_nb, k_goals, k_score, ref_ga
     Returns:
         Brier score for the given weights
     """
+    if side not in ("home", "away"):
+        raise ValueError(f"side must be 'home' or 'away', got {side!r}")
+
     predictions = []
     actuals = []
-    
+
     for _, match in df.iterrows():
         try:
-            # Apply smoothing with given weights
-            home_lambda = apply_smoothing(
-                mu.get('home_offense', 1.0), 
-                mu.get('league_home_offense', 1.0), 
-                k_goals, 
-                ref_games
-            )
-            away_lambda = apply_smoothing(
-                mu.get('away_offense', 1.0),
-                mu.get('league_away_offense', 1.0), 
-                k_goals,
-                ref_games
-            )
-            
-            # Calculate probability of home team scoring
-            home_score_prob = 1 - nb_pmf(0, home_lambda, alpha_nb)
-            
-            # Actual outcome (1 if home team scored, 0 otherwise)
-            actual = 1 if match.get('home_goals', 0) > 0 else 0
-            
-            predictions.append(home_score_prob)
+            if side == "home":
+                lam = apply_smoothing(
+                    mu.get('home_offense', 1.0),
+                    mu.get('league_home_offense', 1.0),
+                    k_goals, ref_games,
+                )
+                actual = 1 if match.get('home_goals', 0) > 0 else 0
+            else:
+                lam = apply_smoothing(
+                    mu.get('away_offense', 1.0),
+                    mu.get('league_away_offense', 1.0),
+                    k_goals, ref_games,
+                )
+                actual = 1 if match.get('away_goals', 0) > 0 else 0
+
+            score_prob = 1 - nb_pmf(0, lam, alpha_nb)
+            predictions.append(score_prob)
             actuals.append(actual)
-            
+
         except Exception as e:
             print(f"Error calculating prediction for match: {e}")
             continue
-    
+
     if not predictions:
-        return float('inf')  # Return worst possible score if no predictions
-        
+        return float('inf')
+
     return brier_score(predictions, actuals)
 
 

@@ -114,7 +114,8 @@ def lambda_handler(event, context):
                     'league_name': league_name,
                     'status': 'success',
                     'matches_analyzed': len(all_scores_df),
-                    'brier_score': league_dict.get('brier'),
+                    'brier_score_home': league_dict.get('brier_home', league_dict.get('brier')),
+                    'brier_score_away': league_dict.get('brier_away'),
                     'multiplier_confidence': float(league_dict.get('confidence', 0))
                 })
             else:

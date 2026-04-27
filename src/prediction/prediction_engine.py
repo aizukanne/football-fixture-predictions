@@ -173,16 +173,19 @@ def calculate_to_score(team1_stats, team2_stats, params, is_home=True, league_id
     if team2_games_total is None or team2_games_total <= 0:
         raise ValueError("team2_games_total is invalid or zero")
 
-    # Extract parameters with defaults
+    # Extract parameters with defaults.
+    # Smoothing constants are now per-side (k_goals_home / k_goals_away);
+    # legacy single-k records fall back via params['k_goals'].
     try:
-        k_goals = params['k_goals']
-        k_score = params['k_score']
+        side_suffix = 'home' if is_home else 'away'
+        k_goals = params.get(f'k_goals_{side_suffix}', params.get('k_goals', 3))
+        k_score = params.get(f'k_score_{side_suffix}', params.get('k_score', 4))
         league_home_adv = params['home_adv']
         ref_games = params.get('ref_games', 20)
         confidence = params.get('confidence', 0.5)
         sample_size = params.get('sample_size', 20)
         alpha_smooth = DEFAULT_SMOOTHING_ALPHA
-        
+
         # Determine which parameters to use based on home/away status
         if is_home:
             goal_prior = params['mu_home']
@@ -354,14 +357,15 @@ def calculate_base_lambda(team1_stats, team2_stats, params, is_home=True):
     if team1_games_total is None or team1_games_total <= 0 or team2_games_total is None or team2_games_total <= 0:
         raise ValueError("Invalid games_total values")
 
-    # Extract parameters
+    # Extract parameters. Per-side smoothing constants with legacy fallback.
     try:
-        k_goals = params['k_goals']
-        k_score = params['k_score']
+        side_suffix = 'home' if is_home else 'away'
+        k_goals = params.get(f'k_goals_{side_suffix}', params.get('k_goals', 3))
+        k_score = params.get(f'k_score_{side_suffix}', params.get('k_score', 4))
         league_home_adv = params['home_adv']
         ref_games = params.get('ref_games', 20)
         alpha_smooth = DEFAULT_SMOOTHING_ALPHA
-        
+
         # Get appropriate priors based on home/away
         if is_home:
             goal_prior = params['mu_home']
@@ -1346,11 +1350,16 @@ def validate_prediction_inputs(team1_params, team2_params, require_version_compa
         print(f"Parameter validation issues detected: {'; '.join(issues)}")
         print("Using neutral fallback parameters to prevent contamination")
         
-        # Create neutral fallback parameters with current version
+        # Create neutral fallback parameters with current version. Provide
+        # both legacy single-k and the new per-side k fields so any reader
+        # path resolves. Per-side defaults mirror the legacy values.
         neutral_params = {
             'mu_home': 1.5, 'mu_away': 1.2, 'p_score_home': 0.75, 'p_score_away': 0.65,
             'alpha_home': 0.3, 'alpha_away': 0.3, 'home_adv': 1.31,
-            'k_goals': 0.5, 'k_score': 0.5, 'ref_games': 20,
+            'k_goals': 0.5, 'k_score': 0.5,
+            'k_goals_home': 0.5, 'k_score_home': 0.5,
+            'k_goals_away': 0.5, 'k_score_away': 0.5,
+            'ref_games': 20,
             'home_multiplier': Decimal('1.0'), 'away_multiplier': Decimal('1.0'),
             'architecture_version': current_version,
             'contamination_prevented': True,
